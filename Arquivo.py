@@ -163,7 +163,8 @@ class Game:
                     removed = self.team.pop(int(idx)-1)
                     self.gold += removed.rarity
                     print(f"\n{removed.name} vendido por {removed.rarity}g!")
-                    market = self.roll_market() # Atualiza o mercado para refletir a nova exclusão
+                    # CORREÇÃO: Removeu-se a linha que rodava o mercado de novo.
+                    # O mercado 'market' permanece intacto após a venda.
                 else:
                     print("\nOpção inválida.")
             elif choice == 'M':
