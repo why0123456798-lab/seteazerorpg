@@ -1,0 +1,48 @@
+Agente,Tipo,Descrição,Player,Raridade,Sinergia,Ataque,Defesa,Vida,Perícia
+Kazumi,Especialista,"Líder da party, sniper habilidosa, boa em combate corpo a corpo. Fria e calculista.",Wagner,5,Akane e Hara Kiri,9,6,3,10
+Agni,Suporte,"Maga, cega, fogo e maluca",Wagner,4,A chama,7,2,3,10
+Akane,Lutador,"Irmã da Kazumi, combate corpo a corpo",Felipe,4,Kazumi,10,5,5,2
+Thoryn,Defensor,Paladino da justiça,Wagner,2,Zendaya,3,6,4,1
+Saphyra,Lutador,Barbaro maluco,Wagner,1,Shantal,6,1,3,0
+Nix,Suporte,Clériga de cura maluca,Wagner,2,,0,0,5,9
+Orion,Suporte,Clérigo defensor e racista,Wagner,1,,1,4,3,2
+Zendaya,Suporte,Barda atiradora,Ferreira,3,Thoryn,6,0,4,8
+Perdigas,Suporte,Padre que enfrentou Lilith,Ferreira,5,Maria Cecília e Leão,2,8,8,10
+Tom,Lutador,"Ex-comandante do exército, velho habilidoso com armas de fogo",Ferreira,4,Maria Cecília,9,3,5,5
+Oriven,Especialista,Engenheiro e inventor habilidoso,Ferreira,2,Heróis de Uagamora,4,1,2,7
+Daerion,Defensor,Inventor habilidoso para armaduras e montador de dragões,Ferreira,3,"Dragão, Heróis do ninho",0,6,4,8
+Kru'el,Especialista,"Nomade, dirige carros e muito é um robo ligado a sexualidade",Ferreira,1,,2,2,0,6
+Maria Cecília,Defensor,"Pistoleira veterana e que se ligou a morte, se tornando quase uma anja da morte",Laura,5,"Perdigas, Tom",8,6,6,8
+Meilyn,Lutador,Samurai asiática,Laura,1,Heróis do Ninho,5,1,4,0
+Megan,Especialista,Médica de combate em ambiente cyberpunk,Laura,2,Hara Kiri,2,2,2,8
+Crane,Lutador,Guerreiro clássico e mortal,Felipe,5,,10,10,8,0
+Aziza,Lutador,Bruxa hexblade mortal,Felipe,4,A chama,10,5,4,3
+Cael,Lutador,Ranger e arqueiro inteligente,Felipe,2,Heróis do Ninho,5,2,3,4
+Mauga,Defensor,Dobrador de metal e ar,Felipe,1,Heróis de Uagamora,1,5,2,2
+Shyvana,Lutador,Barbará meio dragão,Felipe,3,Heróis de Uagamora,7,3,6,2
+Shyva,Especialista,Maga habilidosa com lâminas e feitiços,Felipe,4,Ao inferno,7,5,3,7
+Marcus,Defensor,grandão líder e de coração igrande,Felipe,1,,2,4,2,2
+Leão,Especialista,polícial bom com armas e investigação,Felipe,1,Maria Cecilia e Perdigas,2,2,2,4
+Matheus,Lutador,bom combatente,Jardel,1,,4,2,4,0
+Sirius,Especialista,invoca um parceiro gigante para ajudar na luta,Jardel,2,Ao inferno,3,2,4,5
+Aya,Suporte,barda extremamente poderosa,Jardel,4,Heróis do Ninho,2,3,5,12
+Marcos,Lutador,grande combatente corpo a corpo em cyberpunk - muita vida ,Jardel,2,Hara Kiri,5,4,5,0
+Symon,Suporte,druida de cura e controle,Jardel,3,Heróis de Uagamora,3,3,6,6
+Shantal,Suporte,barda que desceu ao abismo para manter a chama acesa,Laura,2,A chama,2,0,5,7
+Lilith,Especialista,"Grande vilã da campanha de ordem paranormal, a invocação do sangue",NPC,5,Vilão,6,2,8,12
+Caim,Lutador,"Grande vilão da campanha de ordem, a invocação da loucura",NPC,4,Vilão,8,5,8,1
+Lamblin,Lutador,arqueiro elfo primoroso,Ramon,2,,5,2,2,5
+Kael,Lutador,guerreiro orc que está fazendo seu nome,Ramon,3,Heróis de Uagamora,12,1,5,0
+Arkmeros,Suporte,tiefling clerigo leal e bom,Bruno,3,,1,5,3,9
+Ruivo,Especialista,feiticeiro que se tornou um comerciante,NPC,3,Vendedor,6,2,3,7
+Viktor,Defensor,guardião que usa seu escudo para proteger seus companheiros,Bruno,4,Heróis de Uagamora,0,12,8,2
+Cronista,Especialista,grande conhecedor da história do mundo,NPC,2,,3,0,3,8
+Marionetista,Especialista,Vilão baseado no sasori desta campanha,NPC,3,Vilão,7,2,2,7
+Aryte,Defensor,guerreiro lagarto que ajuda o time,NPC,2,Heróis de Uagamora,5,5,2,2
+Vysenia,Lutador,rainha de um grande império e montadora de dragões,NPC,1,Dragão,3,1,0,6
+Bree,Suporte,aprendiz de maga e vendora de itens,NPC,1,Vendedor,2,2,1,5
+Mimoso,Lutador,ferreiro gato que era um grande aventureiro antes,NPC,1,Vendedor,3,2,2,3
+Don Omar,Especialista,velho que é muito inteligente e curioso,NPC,1,,2,1,0,7
+Yasmin,Suporte,clériga e médica do acampamento,NPC,1,Vendedor,0,0,4,6
+Zahra,Lutador,maga de combate do império,NPC,2,Vendedor,8,3,0,3
+Kyra,Suporte,"barda de buff, mas não se mostrou muito",Laura,1,Heróis de Uagamora,2,0,0,8
