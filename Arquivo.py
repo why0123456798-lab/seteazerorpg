@@ -28,7 +28,7 @@ class Agent:
         # Converte o nome para minúsculo para evitar problemas (Ex: "Orion" vira "orion.jpg")
         # Você pode alterar essa lógica se preferir colocar as imagens em uma pasta específica,
         # por exemplo: f"imagens/{self.name.lower()}.jpg"
-        self.image_filename = f"{self.name.lower()}.jpg"
+        self.image_filename = f"{self.name.lower()}.png"
 
     def reset_status(self):
         self.current_life = self.max_life
@@ -110,6 +110,19 @@ class GameGUI:
         self.reset_game_state()
         self.create_mode_selection_screen()
 
+    def mapping_types(self, agentType):
+        typeName = ""
+        if agentType == "Lutador":
+            typeName = "⚔️"
+        elif agentType == "Defensor":
+            typeName = "🛡️"
+        elif agentType == "Especialista":
+            typeName = "🎯"
+        elif agentType == "Suporte":
+            typeName = "❤️"
+
+        return typeName
+
     def reset_game_state(self):
         for a in self.all_agents:
             a.reset_status()
@@ -171,7 +184,7 @@ class GameGUI:
         if agent.name in self.image_cache:
             return self.image_cache[agent.name]
 
-        img_path = os.path.join(self.base_dir, agent.image_filename)
+        img_path = os.path.join(self.base_dir, "Imagens", agent.image_filename)
         
         if os.path.exists(img_path):
             try:
@@ -235,7 +248,7 @@ class GameGUI:
                 color = self.rarity_colors.get(agent.rarity, "white")
                 
                 # 1. Nome do personagem no topo do quadrado
-                title_lbl = tk.Label(card, text=f"[{i+1}] {agent.name}\n({agent.type})", font=("Arial", 11, "bold"), fg=color, bg="#2a2a2a")
+                title_lbl = tk.Label(card, text=f"[{i+1}] {agent.name}\n({self.mapping_types(agent.type)})", font=("Arial", 11, "bold"), fg=color, bg="#2a2a2a")
                 title_lbl.pack(pady=5)
                 
                 # 2. IMAGEM MAIOR (Aumentei o tamanho de 50x50 para 100x100)
@@ -274,7 +287,7 @@ class GameGUI:
             info_container.pack(side="left", fill="both", expand=True)
 
             color = self.rarity_colors.get(agent.rarity, "white")
-            title_lbl = tk.Label(info_container, text=f"{agent.name} ({agent.type})", font=("Arial", 11, "bold"), fg=color, bg="#333333")
+            title_lbl = tk.Label(info_container, text=f"{agent.name} ({self.mapping_types(agent.type)})", font=("Arial", 11, "bold"), fg=color, bg="#333333")
             title_lbl.pack(anchor="w", padx=5, pady=2)
             
             hp_str = f"❤️ Vida: {agent.current_life}/{agent.max_life}"
