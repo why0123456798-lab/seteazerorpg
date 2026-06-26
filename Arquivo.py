@@ -29,7 +29,7 @@ class Agent:
         # Converte o nome para minúsculo para evitar problemas (Ex: "Orion" vira "orion.jpg")
         # Você pode alterar essa lógica se preferir colocar as imagens em uma pasta específica,
         # por exemplo: f"imagens/{self.name.lower()}.jpg"
-        self.image_filename = f"{self.name.lower()}.png"
+        self.image_filename = f"{self.name.lower()}"
 
     def reset_status(self):
         self.current_life = self.max_life
@@ -200,7 +200,9 @@ class GameGUI:
         if agent.name in self.image_cache:
             return self.image_cache[agent.name]
 
-        img_path = os.path.join(self.base_dir, "Imagens", agent.image_filename)
+        img_path = os.path.join(self.base_dir, "Imagens", agent.image_filename + ".png")
+        if(not os.path.exists(img_path)):
+            img_path = os.path.join(self.base_dir, "Imagens", agent.image_filename + ".jpg")
         
         if os.path.exists(img_path):
             try:
