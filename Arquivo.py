@@ -147,7 +147,7 @@ class GameGUI:
         title = tk.Label(frame, text="RPG AUTOBATTLER ROGUELIKE", font=("Arial", 24, "bold"), fg="#ffffff", bg="#1e1e1e")
         title.pack(pady=20)
         
-        btn_normal = tk.Button(frame, text="Modo Clássico (Normal)", font=("Arial", 14), bg="#f44336", fg="white", width=30, height=3, command=lambda: self.start_game("Normal"))
+        btn_normal = tk.Button(frame, text="Modo Clássico (Normal)", font=("Arial", 14), bg="#0a6d27", fg="white", width=30, height=3, command=lambda: self.start_game("Normal"))
         btn_normal.pack(pady=10)
 
         btn_hard = tk.Button(frame, text="Modo Difícil\n[Permadeath e Críticos 2x]", font=("Arial", 14), bg="#f44336", fg="white", width=30, height=3, command=lambda: self.start_game("Difícil"))
@@ -406,16 +406,23 @@ class GameGUI:
         self.append_log("Fase preparada. Identificando combatentes viáveis...")
         self.setup_next_combatant_info()
 
-    def append_log(self, text):
+    def append_log(self, text, cor="white"):
         self.log_txt.config(state="normal")
-        self.log_txt.insert(tk.END, text + "\n")
+
+        # 1. Configura a tag dinamicamente.
+        # Isso diz ao Tkinter: "A tag com o nome 'red' deve ter o texto vermelho (foreground)"
+        self.log_txt.tag_config(cor, foreground=cor)
+
+        # 2. Insere o texto aplicando a tag que configuramos acima
+        self.log_txt.insert(tk.END, text + "\n", cor)
+
         self.log_txt.see(tk.END)
         self.log_txt.config(state="disabled")
 
     def setup_next_combatant_info(self):
         alive_heroes = [a for a in self.team if a.current_life > 0]
         if not alive_heroes or self.falhas >= 3:
-            self.end_mission_calculations()
+            self.end_mission_calculations(False)
             return
             
         self.best_hero = None
@@ -437,6 +444,12 @@ class GameGUI:
         self.lbl_battle_img.config(image=battle_photo)
 
     def next_test_roll(self):
+
+        VERDE = "\033[92m"
+        AMARELO = "\033[93m"
+        VERMELHO = "\033[91m"
+        RESET = "\033[0m"
+
         d20 = random.randint(1, 20)
         total = self.best_val + d20
         
@@ -444,18 +457,18 @@ class GameGUI:
         self.append_log(f"Resultado do dado: {d20} | Total: {total} vs Alvo {self.dc}")
         
         if self.mode == "Difícil" and d20 == 20:
-            self.append_log("🌟 CRÍTICO POSITIVO! Contando como 2 SUCESSOS!")
+            self.append_log(f"🌟 CRÍTICO POSITIVO! Contando como 2 SUCESSOS!", cor="green")
             self.sucessos += 2
         elif self.mode == "Difícil" and d20 == 1:
-            self.append_log("💀 CRÍTICO NEGATIVO! 1 Falha Crítica anotada.")
+            self.append_log(f"💀 CRÍTICO NEGATIVO! 1 Falha Crítica anotada.", cor="red")
             self.falhas += 2
             dano = self.current_level * 2
             self.apply_gui_damage(self.best_hero, dano)
         elif total >= self.dc:
-            self.append_log("🟢 SUCESSO!")
+            self.append_log(f"🟢 SUCESSO!", cor="green")
             self.sucessos += 1
         else:
-            self.append_log("🔴 FALHA!")
+            self.append_log(f"🔴 FALHA!", cor="red")
             self.falhas += 1
             dano = self.current_level
             self.apply_gui_damage(self.best_hero, dano)
@@ -490,7 +503,7 @@ class GameGUI:
                 hero.current_life = 0
                 self.append_log(f"💤 NOCAUTE: {hero.name} desmaiou.")
 
-    def end_mission_calculations(self):
+    def end_mission_calculations(self, aliveHeroes = True):
         self.clear_screen()
         
         for a in self.team:
@@ -502,11 +515,18 @@ class GameGUI:
         lbl_title = tk.Label(frame, text=f"RESULTADO FINAL: {self.sucessos} SUCESSOS | {self.falhas} FALHAS", font=("Arial", 16, "bold"), fg="white", bg="#1e1e1e")
         lbl_title.pack(pady=20)
         
-        if self.falhas >= 3:
+        if not aliveHeroes:
+            lbl_res = tk.Label(frame, text="🔴 GAME OVER!\nSua equipe inteira está morta!", font=("Arial", 14, "bold"), fg="#f44336", bg="#1e1e1e")
+            lbl_res.pack(pady=10)
+            btn_continue = tk.Button(frame, text="REINICIAR JOGO", font=("Arial", 12, "bold"), bg="#f44336", fg="white", command=self.restart_entire_game)
+            btn_continue.pack(pady=20)
+
+        elif self.falhas >= 3:
             lbl_res = tk.Label(frame, text="🔴 GAME OVER!\nSua equipe acumulou 3 ou mais falhas e não conseguiu completar o andar.", font=("Arial", 14, "bold"), fg="#f44336", bg="#1e1e1e")
             lbl_res.pack(pady=10)
             btn_continue = tk.Button(frame, text="REINICIAR JOGO", font=("Arial", 12, "bold"), bg="#f44336", fg="white", command=self.restart_entire_game)
             btn_continue.pack(pady=20)
+
         else:
             if self.sucessos == 3:
                 txt, g = "🟡 VITÓRIA PÍRRICA! Vocês avançaram no limite.", 2
