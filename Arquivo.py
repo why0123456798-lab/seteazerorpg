@@ -358,6 +358,9 @@ class GameGUI:
             messagebox.showwarning("Aviso", "Sua equipe excede o limite máximo de 5 personagens!")
         elif len(self.team) == 0:
             messagebox.showwarning("Aviso", "Você não pode ir para a missão com o time vazio!")
+        else:
+            self.start_mission_phase()
+        
 
     def start_mission_phase(self):
         self.clear_screen()
