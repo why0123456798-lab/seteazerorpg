@@ -4,6 +4,8 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 
+
+
 class Agent:
     def __init__(self, row):
         self.name = row['Agente']
@@ -103,7 +105,7 @@ class GameGUI:
         self.team = []
         self.gold = 10
         self.current_level = 1
-        self.mode = "Fácil"
+        self.mode = "Difícil"
         self.round_bonuses = {"Ataque": 0, "Defesa": 0, "Escudo": 0, "DC_Reduction": 0}
         self.market = []
 
@@ -119,9 +121,6 @@ class GameGUI:
         
         title = tk.Label(frame, text="RPG AUTOBATTLER ROGUELIKE", font=("Arial", 24, "bold"), fg="#ffffff", bg="#1e1e1e")
         title.pack(pady=20)
-        
-        btn_easy = tk.Button(frame, text="Modo Padrão (Fácil)\n[Nocaute resgata com 1 HP]", font=("Arial", 14), bg="#4caf50", fg="white", width=30, height=3, command=lambda: self.start_game("Fácil"))
-        btn_easy.pack(pady=10)
         
         btn_hard = tk.Button(frame, text="Modo Clássico (Difícil)\n[Permadeath e Críticos 2x]", font=("Arial", 14), bg="#f44336", fg="white", width=30, height=3, command=lambda: self.start_game("Difícil"))
         btn_hard.pack(pady=10)
@@ -168,7 +167,7 @@ class GameGUI:
         btn_mission = tk.Button(top_frame, text="⚔️ IR PARA MISSÃO", font=("Arial", 12, "bold"), bg="#ff5722", fg="white", command=self.check_go_to_mission)
         btn_mission.pack(side="right", padx=20, pady=10)
         
-        btn_reroll = tk.Button(top_frame, text="🔄 Reroll Loja (1g)", font=("Arial", 12), bg="#795548", fg="white", command=self.reroll_shop)
+        btn_reroll = tk.Button(top_frame, text=f"🔄 Reroll Loja ({self.count}g)", font=("Arial", 12), bg="#795548", fg="white", command=self.reroll_shop)
         btn_reroll.pack(side="right", padx=10, pady=10)
 
         # Container Principal
@@ -198,7 +197,7 @@ class GameGUI:
                 btn_buy.pack(side="right", padx=5, pady=2)
 
         # Seção do Time (Direita)
-        team_frame = tk.LabelFrame(main_frame, text=" Sua Equipe (Mín 3 / Máx 5) ", font=("Arial", 12, "bold"), fg="white", bg="#1e1e1e", labelanchor="n")
+        team_frame = tk.LabelFrame(main_frame, text=" Sua Equipe (Mín 1 / Máx 5) ", font=("Arial", 12, "bold"), fg="white", bg="#1e1e1e", labelanchor="n")
         team_frame.pack(side="right", fill="both", expand=True, padx=10, pady=5)
         
         if not self.team:
@@ -218,10 +217,18 @@ class GameGUI:
             
             btn_sell = tk.Button(card, text=f"Vender (+{agent.rarity}g)", bg="#f44336", fg="white", font=("Arial", 9), command=lambda idx=i: self.sell_agent(idx))
             btn_sell.pack(side="right", padx=5, pady=2)
-
+    
+    count = 1
     def reroll_shop(self):
+        global count
+
+        if self.gold == self.count and len(self.team) < 1:
+            messagebox.showwarning("Aviso", "É necessário ter moedas suficiente para um personagem!")
+            return
+
         if self.gold >= 1:
-            self.gold -= 1
+            self.gold -= self.count
+            self.count+=1
             self.market = self.roll_market()
             self.create_shop_screen()
         else:
@@ -253,9 +260,7 @@ class GameGUI:
         pode_comprar_algo = any(a is not None and self.gold >= a.rarity for a in self.market)
         esta_travado = (not pode_dar_reroll) and (not pode_comprar_algo)
 
-        if len(self.team) < 3 and not esta_travado:
-            messagebox.showwarning("Aviso", "Você precisa de no mínimo 3 personagens para ir à missão!")
-        elif len(self.team) > 5:
+        if len(self.team) > 5:
             messagebox.showwarning("Aviso", "Sua equipe excede o limite máximo de 5 personagens!")
         elif len(self.team) == 0:
             messagebox.showwarning("Aviso", "Você não pode ir para a missão com o time vazio!")
@@ -323,20 +328,21 @@ class GameGUI:
                 self.best_hero = a
                 
         self.btn_roll.config(text=f"🎲 ROLAR PARA {self.best_hero.name.upper()} (Total: {self.best_val}) [Teste {self.teste_num}/5]")
+        lbl_title = tk.Label(text=f"RESULTADO FINAL: {self.sucessos} SUCESSOS | {self.falhas} FALHAS", font=("Arial", 16, "bold"), fg="white", bg="#1e1e1e")
 
     def next_test_roll(self):
         d20 = random.randint(1, 20)
         total = self.best_val + d20
         
         self.append_log(f"\n--- TESTE {self.teste_num}/5 ({self.best_hero.name}) ---")
-        self.append_log(f"Resultado do dado: {d20} + Atributo: {self.best_val} = Total: {total} vs Alvo {self.dc}")
+        self.append_log(f"Resultado do dado: Total: {total} vs Alvo {self.dc}")
         
         if self.mode == "Difícil" and d20 == 20:
             self.append_log("🌟 CRÍTICO POSITIVO! Contando como 2 SUCESSOS!")
             self.sucessos += 2
         elif self.mode == "Difícil" and d20 == 1:
             self.append_log("💀 CRÍTICO NEGATIVO! 1 Falha Crítica anotada.")
-            self.falhas += 1
+            self.falhas += 2
             dano = self.current_level * 2
             self.apply_gui_damage(self.best_hero, dano)
         elif total >= self.dc:
@@ -347,10 +353,8 @@ class GameGUI:
             self.falhas += 1
             dano = self.current_level
             self.apply_gui_damage(self.best_hero, dano)
-            
-        self.best_hero.fatigue[self.current_theme] += self.current_level
-        self.append_log(f"💤 {self.best_hero.name} fadigado em {self.current_theme} (Modificador atual: -{self.best_hero.fatigue[self.current_theme]})")
-        
+        self.best_hero.fatigue[self.current_theme] += 1
+
         self.teste_num += 1
         
         if self.falhas >= 3 or self.teste_num > 5:
@@ -432,12 +436,6 @@ class GameGUI:
         def add_msg(msg): log_box.insert(tk.END, msg + "\n")
         
         add_msg("💰 +5g de salário base depositados.")
-        
-        if self.mode == "Fácil":
-            for a in self.team:
-                if a.current_life == 0:
-                    a.current_life = 1
-                    add_msg(f"❤️ {a.name} acordou do nocaute com 1 HP.")
 
         if suportes > 0:
             for a in self.team:
@@ -467,6 +465,7 @@ class GameGUI:
         else:
             btn_text = "IR PARA A LOJA 🛒"
             cmd = lambda: [setattr(self, 'market', self.roll_market()), self.create_shop_screen()]
+            self.count = 1
             
         tk.Button(frame, text=btn_text, font=("Arial", 12, "bold"), bg="#2196f3", fg="white", command=cmd).pack(pady=10)
 
