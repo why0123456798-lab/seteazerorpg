@@ -21,6 +21,10 @@ class Agent:
         self.current_life = self.max_life
         self.fatigue = {"Ataque": 0, "Defesa": 0, "Perícia": 0}
 
+    def reset_status(self):
+        self.current_life = self.max_life
+        self.fatigue = {"Ataque": 0, "Defesa": 0, "Perícia": 0}
+
     def reset_fatigue(self):
         self.fatigue = {"Ataque": 0, "Defesa": 0, "Perícia": 0}
 
@@ -68,27 +72,38 @@ class Agent:
 
 class Game:
     def __init__(self, csv_path):
-        self.df = pd.read_csv(csv_path)
+        import os
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        full_path = os.path.join(base_dir, csv_path)
+        
+        try:
+            self.df = pd.read_csv(full_path)
+        except FileNotFoundError:
+            print("\n" + "!"*60)
+            print(f"❌ ERRO: O arquivo '{csv_path}' não foi encontrado!")
+            print(f"Procurei no caminho: {full_path}")
+            print("Verifique se o arquivo .csv está na MESMA pasta do script game.py.")
+            print("!"*60 + "\n")
+            raise
+            
         self.all_agents = [Agent(row) for _, row in self.df.iterrows()]
+        self.reset_game_state()
+
+    def reset_game_state(self):
+        # Reseta os heróis do banco de dados para os valores máximos originais
+        for a in self.all_agents:
+            a.reset_status()
         self.team = []
         self.gold = 10
         self.current_level = 1
-        self.mode = "Fácil" # Mudar para "Difícil" se escolhido
-        
-        # Bônus temporários das passivas de classe obtidos no fim da rodada
+        self.mode = "Fácil"
         self.round_bonuses = {"Ataque": 0, "Defesa": 0, "Escudo": 0, "DC_Reduction": 0}
 
     def choose_mode(self):
         print("="*50)
         print("      BEM-VINDO AO RPG AUTOBATTLER ROGUELIKE      ")
         print("="*50)
-        print("Escolha o Modo de Jogo:")
-        print("[1] Modo Padrão (Fácil): Heróis nocauteados voltam com 1 HP pós-missão.")
-        print("[2] Modo Clássico (Difícil): Permadeath ativo. Críticos dão 2x resultados.")
-        choice = input("Opção: ")
-        if choice == "2":
-            self.mode = "Difícil"
-        print(f"\nModo de jogo selecionado: {self.mode}\n")
+        self.mode = "Difícil"
 
     def get_market_pool(self):
         # Filtra os agentes que já não estão no time do jogador
@@ -105,7 +120,7 @@ class Game:
         # Custo:  1    2    3    4    5
         weights = [0.40, 0.30, 0.15, 0.10, 0.05]
         
-        while len(market_slots) < 3:
+        while len(market_slots) < 4:
             chosen_rarity = random.choices([1, 2, 3, 4, 5], weights=weights, k=1)[0]
             valid_options = [a for a in pool if a.rarity == chosen_rarity and a not in market_slots]
             
@@ -139,9 +154,13 @@ class Game:
         while True:
             self.show_team()
             print(f"💰 Moedas Disponíveis: {self.gold}g | Missão Atual: Nível {self.current_level}")
+            
             print("\n--- MERCADO DO TURNO ---")
             for i, a in enumerate(market):
-                print(f"[{i+1}] 🪙 {a.rarity}g - {a.name} ({a.type}) | \"{a.desc[:45]}...\" | ATK:{a.base_attack} DEF:{a.base_defense} PER:{a.base_skill} VID:{a.max_life}")
+                if a is None:
+                    print(f"[{i+1}] --------- COMPRADO ---------")
+                else:
+                    print(f"[{i+1}] 🪙   {a.rarity}g - {a.name} ({a.type}) | \"{a.desc[:45]}...\" | ATK:{a.base_attack} DEF:{a.base_defense} PER:{a.base_skill} VID:{a.max_life}")
             
             print("\n[R] Reroll Loja (1g)  [V] Vender Herói  [M] Ir para Missão")
             choice = input("Escolha uma ação ou número para comprar: ").strip().upper()
@@ -152,7 +171,7 @@ class Game:
                     market = self.roll_market()
                     print("\nLoja atualizada!")
                 else:
-                    print("\nMoedas insuficientes!")
+                    print("\nMoedas insuficientes para Reroll!")
             elif choice == 'V':
                 if not self.team:
                     print("\nTime vazio.")
@@ -163,24 +182,43 @@ class Game:
                     removed = self.team.pop(int(idx)-1)
                     self.gold += removed.rarity
                     print(f"\n{removed.name} vendido por {removed.rarity}g!")
-                    # CORREÇÃO: Removeu-se a linha que rodava o mercado de novo.
-                    # O mercado 'market' permanece intacto após a venda.
                 else:
                     print("\nOpção inválida.")
             elif choice == 'M':
-                if len(self.team) < 3:
-                    print("\nErro: Você precisa de no mínimo 3 personagens para ir à missão!")
-                elif len(self.team) > 5:
+                # --- VERIFICAÇÃO DE FALÊNCIA ECONÔMICA ---
+                pode_dar_reroll = (self.gold >= 1)
+                
+                # Verifica se há pelo menos um herói acessível no mercado atual
+                pode_comprar_algo = False
+                for a in market:
+                    if a is not None and self.gold >= a.rarity:
+                        pode_comprar_algo = True
+                        break
+                
+                # Se não tem dinheiro pra reroll E não consegue comprar ninguém da vitrine:
+                esta_travado = (not pode_dar_reroll) and (not pode_comprar_algo)
+                if len(self.team) > 5:
                     print("\nErro: Sua equipe excede o limite máximo de 5 personagens!")
+                elif len(self.team) == 0:
+                    print("\nErro: Você não pode ir para a missão com o time completamente vazio (0 heróis)!")
                 else:
+                    if esta_travado and len(self.team) < 3:
+                        print("\n⚠️ EXCEÇÃO DE RECURSOS: Detectamos que você está sem moedas para ações na loja.")
+                        print(f"Avançando para a missão com apenas {len(self.team)} herói(s). Boa sorte!")
+                        input("[Pressione Enter para continuar]")
                     break
             elif choice.isdigit() and 1 <= int(choice) <= len(market):
                 chosen_agent = market[int(choice)-1]
+                
+                if chosen_agent is None:
+                    print("\nEste personagem já foi comprado!")
+                    continue
+                    
                 if self.gold >= chosen_agent.rarity:
                     if len(self.team) < 5:
                         self.gold -= chosen_agent.rarity
                         self.team.append(chosen_agent)
-                        market.remove(chosen_agent)
+                        market[int(choice)-1] = None  
                         print(f"\n{chosen_agent.name} comprado com sucesso!")
                     else:
                         print("\nEquipe cheia (máximo 5 personagens)!")
@@ -190,15 +228,11 @@ class Game:
                 print("\nComando inválido.")
 
     def run_mission(self):
-        # Sorteia o tema do nível
         themes = ["Ataque", "Defesa", "Perícia"]
         current_theme = random.choice(themes)
         
-        # DCs base por nível
         dc_table = {1: 10, 2: 13, 3: 16, 4: 20, 5: 25}
         base_dc = dc_table[self.current_level]
-        
-        # Aplica redução dos Especialistas (limitado a -3)
         dc = max(1, base_dc - self.round_bonuses["DC_Reduction"])
         
         print("\n" + "="*50)
@@ -207,22 +241,17 @@ class Game:
         print("="*50)
         time.sleep(1)
 
-        # Configura escudos temporários fornecidos pelos Defensores
         shields = {a.name: self.round_bonuses["Escudo"] for a in self.team}
-        
         sucessos = 0
-        fracassos = 0
+        falhas = 0  # Nova variável para contar as falhas acumuladas
         
-        # Executa os 5 testes
         for teste_num in range(1, 6):
-            # Filtra apenas heróis com vida > 0
             alive_heroes = [a for a in self.team if a.current_life > 0]
             if not alive_heroes:
                 print("\n☠️ Todos os heróis morreram no meio da missão!")
+                falhas = 3  # Força o Game Over por falta de combatentes
                 break
                 
-            # Identifica o herói com maior atributo atual para o tema sorteado
-            # Adiciona os bônus temporários vindos dos Lutadores se o tema for Ataque
             best_hero = None
             best_val = -999
             
@@ -244,13 +273,12 @@ class Game:
             total = best_val + d20
             print(f"🎲 Rolagem: {d20} (Dado) + {best_val} (Atributo) = {total} vs DC {dc}")
             
-            # Tratamento de Críticos e Resultados
             if self.mode == "Difícil" and d20 == 20:
                 print("🌟 CRÍTICO POSITIVO (20 NATURAL)! Contando como 2 SUCESSOS!")
                 sucessos += 2
             elif self.mode == "Difícil" and d20 == 1:
-                print("💀 CRÍTICO NEGATIVO (1 NATURAL)! Contando como 2 FRACASSOS!")
-                fracassos += 2
+                print("💀 CRÍTICO NEGATIVO (1 NATURAL)! Contando como 1 FALHA CRÍTICA!")
+                falhas += 2
                 dano = self.current_level * 2
                 self.apply_damage(best_hero, dano, shields)
             elif total >= dc:
@@ -258,26 +286,28 @@ class Game:
                 sucessos += 1
             else:
                 print("🔴 FALHA!")
-                fracassos += 1
+                falhas += 1
                 dano = self.current_level
                 self.apply_damage(best_hero, dano, shields)
                 
-            # Aplica o efeito mecânico de FADIGA (-nível)
+            # CHECAGEM DE GAME OVER IMEDIATO
+            if falhas >= 3:
+                print(f"\n❌ O time acumulou {falhas} falhas nesta missão!")
+                break
             best_hero.fatigue[current_theme] += 1
             print(f"💤 {best_hero.name} fadigou em {current_theme} (Fadiga Atual: -{best_hero.fatigue[current_theme]}).")
             time.sleep(1)
 
-        # Avaliação Final da Missão
         print("\n" + "="*40)
-        print(f"FIM DOS TESTES. PLACAR: {sucessos} SUCESSOS")
+        print(f"FIM DOS TESTES. PLACAR: {sucessos} SUCESSOS | {falhas} FALHAS")
         print("="*40)
         
-        # Reset de fadigas acumuladas
+        # Limpa as fadigadas após a missão terminar ou falhar
         for a in self.team:
             a.reset_fatigue()
             
-        if sucessos <= 2:
-            print("\n🔴 FRACASSO ABSOLUTO! Sua equipe sucumbiu aos desafios. GAME OVER!")
+        if falhas >= 3:
+            print("\n🔴 GAME OVER! Sua equipe acumulou 3 ou mais falhas e não conseguiu completar o andar.")
             return False
         elif sucessos == 3:
             print("\n🟡 VITÓRIA PÍRRICA! Vocês avançam, mas por um triz. (+2 Moedas)")
@@ -289,7 +319,6 @@ class Game:
             print("\n🟢 VITÓRIA ABSOLUTA! Perfeito e lendário! (+8 Moedas)")
             self.gold += 8
             
-        # Processamento do Fim da Rodada / Descanso
         self.run_rest_phase()
         self.current_level += 1
         return True
@@ -360,25 +389,37 @@ class Game:
 
 
     def start(self):
-        self.choose_mode()
-        while self.current_level <= 5:
-            # Verifica se restam heróis vivos no time (Caso de game over por permadeath na rodada passada)
-            if self.current_level > 1 and not [a for a in self.team if a.current_life > 0]:
-                print("\n💀 Todos os heróis do seu time morreram. Fim de jogo!")
-                break
-                
-            self.shop_phase()
-            success = self.run_mission()
-            if not success:
-                break
-                
-        if self.current_level > 5:
-            print("\n" + "🎉"*15)
-            print(" PARABÉNS! VOCÊ SUPEROU OS 5 NÍVEIS E ZEROU O JOGO! ")
-            print("🎉"*15 + "\n")
+        # CORREÇÃO: O jogo agora roda num loop infinito para permitir reinicializações
+        while True:
+            self.reset_game_state()
+            self.choose_mode()
+            
+            game_over = False
+            while self.current_level <= 5:
+                if self.current_level > 1 and not [a for a in self.team if a.current_life > 0]:
+                    print("\n💀 Todos os heróis do seu time morreram. Fim de jogo!")
+                    game_over = True
+                    break
+                    
+                self.shop_phase()
+                success = self.run_mission()
+                if not success:
+                    game_over = True
+                    break
+            
+            if not game_over and self.current_level > 5:
+                print("\n" + "🎉"*15)
+                print(" PARABÉNS! VOCÊ SUPEROU OS 5 NÍVEIS E ZEROU O JOGO! ")
+                print("🎉"*15 + "\n")
+            
+            print("\n" + "="*50)
+            print("                FIM DA PARTIDA                ")
+            print("="*50)
+            input("[Pressione Enter para reiniciar o jogo do zero]")
+            print("\n\n" + "\n"*10) # Afasta o texto anterior da tela
 
 # Inicialização
 if __name__ == "__main__":
     # Nome exato da planilha atualizada que você enviou por último
-    game = Game("Plano de jogo - Página1 (2).csv")
+    game = Game("plano.csv")
     game.start()
