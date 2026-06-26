@@ -2,6 +2,7 @@ import pandas as pd
 import random
 import os
 import tkinter as tk
+import math
 from tkinter import messagebox, ttk
 # Importações necessárias para manipular imagens JPG/PNG no Tkinter
 from PIL import Image, ImageTk 
@@ -146,7 +147,10 @@ class GameGUI:
         title = tk.Label(frame, text="RPG AUTOBATTLER ROGUELIKE", font=("Arial", 24, "bold"), fg="#ffffff", bg="#1e1e1e")
         title.pack(pady=20)
         
-        btn_hard = tk.Button(frame, text="Modo Clássico (Difícil)\n[Permadeath e Críticos 2x]", font=("Arial", 14), bg="#f44336", fg="white", width=30, height=3, command=lambda: self.start_game("Difícil"))
+        btn_normal = tk.Button(frame, text="Modo Clássico (Normal)", font=("Arial", 14), bg="#f44336", fg="white", width=30, height=3, command=lambda: self.start_game("Normal"))
+        btn_normal.pack(pady=10)
+
+        btn_hard = tk.Button(frame, text="Modo Difícil\n[Permadeath e Críticos 2x]", font=("Arial", 14), bg="#f44336", fg="white", width=30, height=3, command=lambda: self.start_game("Difícil"))
         btn_hard.pack(pady=10)
 
     def start_game(self, mode):
@@ -161,21 +165,33 @@ class GameGUI:
     def roll_market(self):
         pool = self.get_market_pool()
         if not pool: return []
-        market_slots = []
-        weights = [0.40, 0.30, 0.15, 0.10, 0.05]
         
-        while len(market_slots) < 4:
-            chosen_rarity = random.choices([1, 2, 3, 4, 5], weights=weights, k=1)[0]
-            valid_options = [a for a in pool if a.rarity == chosen_rarity and a not in market_slots]
-            while not valid_options and chosen_rarity > 1:
-                chosen_rarity -= 1
-                valid_options = [a for a in pool if a.rarity == chosen_rarity and a not in market_slots]
-            if valid_options:
-                market_slots.append(random.choice(valid_options))
-            else:
-                remaining = [a for a in pool if a not in market_slots]
-                if remaining: market_slots.append(random.choice(remaining))
-                else: break
+        # Mapeia diretamente a raridade para a probabilidade estipulada
+        rarity_weights = {1: 0.40, 2: 0.30, 3: 0.15, 4: 0.10, 5: 0.05}
+        
+        market_slots = []
+        
+        # Queremos preencher até 4 slots (ou o máximo de heróis que restarem na pool)
+        slots_necessarios = min(4, len(pool))
+        
+        while len(market_slots) < slots_necessarios:
+            # 1. Calcula o peso de cada herói que sobrou na pool e que ainda não foi listado nesta rolagem
+            opcoes_disponiveis = [a for a in pool if a not in market_slots]
+            if not opcoes_disponiveis:
+                break
+                
+            # Define o peso individual de cada herói com base na raridade dele
+            pesos_dos_herois = [rarity_weights.get(a.rarity, 0.0) for a in opcoes_disponiveis]
+            
+            # Se por acaso a soma dos pesos for zero (ex: só sobraram heróis com peso zerado), 
+            # define peso igual para o que sobrar para o jogo não quebrar
+            if sum(pesos_dos_herois) == 0:
+                pesos_dos_herois = [1] * len(opcoes_disponiveis)
+            
+            # 2. Sorteia exatamente 1 herói usando os pesos calibrados
+            heroi_escolhido = random.choices(opcoes_disponiveis, weights=pesos_dos_herois, k=1)[0]
+            market_slots.append(heroi_escolhido)
+            
         return market_slots
 
     # --- FUNÇÃO AUXILIAR PARA CARREGAR IMAGEM ---
@@ -294,7 +310,7 @@ class GameGUI:
             stats_lbl = tk.Label(info_container, text=f"{hp_str} | ⚔️ ATK:{agent.base_attack} 🛡️ DEF:{agent.base_defense} 🎯 PER:{agent.base_skill}", font=("Arial", 10), fg="#e0e0e0", bg="#333333")
             stats_lbl.pack(anchor="w", padx=5)
             
-            btn_sell = tk.Button(card, text=f"Vender (+{agent.rarity}g)", bg="#f44336", fg="white", font=("Arial", 9), command=lambda idx=i: self.sell_agent(idx))
+            btn_sell = tk.Button(card, text=f"Vender (+{math.ceil(agent.rarity/2)}g)", bg="#f44336", fg="white", font=("Arial", 9), command=lambda idx=i: self.sell_agent(idx))
             btn_sell.pack(side="right", padx=5, pady=2)
     
     count = 1
@@ -328,7 +344,7 @@ class GameGUI:
 
     def sell_agent(self, idx):
         removed = self.team.pop(idx)
-        self.gold += removed.rarity
+        self.gold += math.ceil(removed.rarity/2)
         self.create_shop_screen()
 
     def check_go_to_mission(self):
@@ -340,10 +356,6 @@ class GameGUI:
             messagebox.showwarning("Aviso", "Sua equipe excede o limite máximo de 5 personagens!")
         elif len(self.team) == 0:
             messagebox.showwarning("Aviso", "Você não pode ir para a missão com o time vazio!")
-        else:
-            if esta_travado and len(self.team) < 3:
-                messagebox.showinfo("Exceção de Recursos", f"Falta de moedas detectada. Avançando com {len(self.team)} herói(s)!")
-            self.start_mission_phase()
 
     def start_mission_phase(self):
         self.clear_screen()
