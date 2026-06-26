@@ -2,8 +2,10 @@ import pandas as pd
 import random
 import os
 import tkinter as tk
+import math
 from tkinter import messagebox, ttk
-
+# Importações necessárias para manipular imagens JPG/PNG no Tkinter
+from PIL import Image, ImageTk 
 
 
 class Agent:
@@ -22,6 +24,12 @@ class Agent:
         
         self.current_life = self.max_life
         self.fatigue = {"Ataque": 0, "Defesa": 0, "Perícia": 0}
+
+        # --- CONFIGURAÇÃO DA IMAGEM ---
+        # Converte o nome para minúsculo para evitar problemas (Ex: "Orion" vira "orion.jpg")
+        # Você pode alterar essa lógica se preferir colocar as imagens em uma pasta específica,
+        # por exemplo: f"imagens/{self.name.lower()}.jpg"
+        self.image_filename = f"{self.name.lower()}"
 
     def reset_status(self):
         self.current_life = self.max_life
@@ -71,7 +79,7 @@ class GameGUI:
     def __init__(self, root, csv_path):
         self.root = root
         self.root.title("RPG Autobattler Roguelike")
-        self.root.geometry("900x650")
+        self.root.geometry("950x700") # Aumentado ligeiramente para comportar as imagens confortavelmente
         self.root.configure(bg="#1e1e1e")
         
         # Cores por Raridade
@@ -84,8 +92,8 @@ class GameGUI:
         }
 
         # Carregar Banco de Dados
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        full_path = os.path.join(base_dir, csv_path)
+        self.base_dir = os.path.dirname(os.path.abspath(__file__))
+        full_path = os.path.join(self.base_dir, csv_path)
         try:
             self.df = pd.read_csv(full_path)
         except FileNotFoundError:
@@ -95,9 +103,26 @@ class GameGUI:
             
         self.all_agents = [Agent(row) for _, row in self.df.iterrows()]
         
+        # Dicionário para manter o cache de imagens carregadas na memória do Tkinter
+        # Isso impede que o Garbage Collector do Python delete as imagens da tela
+        self.image_cache = {}
+
         # Inicializar Estado
         self.reset_game_state()
         self.create_mode_selection_screen()
+
+    def mapping_types(self, agentType):
+        typeName = ""
+        if agentType == "Lutador":
+            typeName = "⚔️"
+        elif agentType == "Defensor":
+            typeName = "🛡️"
+        elif agentType == "Especialista":
+            typeName = "🎯"
+        elif agentType == "Suporte":
+            typeName = "❤️"
+
+        return typeName
 
     def reset_game_state(self):
         for a in self.all_agents:
@@ -122,7 +147,10 @@ class GameGUI:
         title = tk.Label(frame, text="RPG AUTOBATTLER ROGUELIKE", font=("Arial", 24, "bold"), fg="#ffffff", bg="#1e1e1e")
         title.pack(pady=20)
         
-        btn_hard = tk.Button(frame, text="Modo Clássico (Difícil)\n[Permadeath e Críticos 2x]", font=("Arial", 14), bg="#f44336", fg="white", width=30, height=3, command=lambda: self.start_game("Difícil"))
+        btn_normal = tk.Button(frame, text="Modo Clássico (Normal)", font=("Arial", 14), bg="#f44336", fg="white", width=30, height=3, command=lambda: self.start_game("Normal"))
+        btn_normal.pack(pady=10)
+
+        btn_hard = tk.Button(frame, text="Modo Difícil\n[Permadeath e Críticos 2x]", font=("Arial", 14), bg="#f44336", fg="white", width=30, height=3, command=lambda: self.start_game("Difícil"))
         btn_hard.pack(pady=10)
 
     def start_game(self, mode):
@@ -137,22 +165,60 @@ class GameGUI:
     def roll_market(self):
         pool = self.get_market_pool()
         if not pool: return []
-        market_slots = []
-        weights = [0.40, 0.30, 0.15, 0.10, 0.05]
         
-        while len(market_slots) < 4:
-            chosen_rarity = random.choices([1, 2, 3, 4, 5], weights=weights, k=1)[0]
-            valid_options = [a for a in pool if a.rarity == chosen_rarity and a not in market_slots]
-            while not valid_options and chosen_rarity > 1:
-                chosen_rarity -= 1
-                valid_options = [a for a in pool if a.rarity == chosen_rarity and a not in market_slots]
-            if valid_options:
-                market_slots.append(random.choice(valid_options))
-            else:
-                remaining = [a for a in pool if a not in market_slots]
-                if remaining: market_slots.append(random.choice(remaining))
-                else: break
+        # Mapeia diretamente a raridade para a probabilidade estipulada
+        rarity_weights = {1: 0.40, 2: 0.30, 3: 0.15, 4: 0.10, 5: 0.05}
+        
+        market_slots = []
+        
+        # Queremos preencher até 4 slots (ou o máximo de heróis que restarem na pool)
+        slots_necessarios = min(4, len(pool))
+        
+        while len(market_slots) < slots_necessarios:
+            # 1. Calcula o peso de cada herói que sobrou na pool e que ainda não foi listado nesta rolagem
+            opcoes_disponiveis = [a for a in pool if a not in market_slots]
+            if not opcoes_disponiveis:
+                break
+                
+            # Define o peso individual de cada herói com base na raridade dele
+            pesos_dos_herois = [rarity_weights.get(a.rarity, 0.0) for a in opcoes_disponiveis]
+            
+            # Se por acaso a soma dos pesos for zero (ex: só sobraram heróis com peso zerado), 
+            # define peso igual para o que sobrar para o jogo não quebrar
+            if sum(pesos_dos_herois) == 0:
+                pesos_dos_herois = [1] * len(opcoes_disponiveis)
+            
+            # 2. Sorteia exatamente 1 herói usando os pesos calibrados
+            heroi_escolhido = random.choices(opcoes_disponiveis, weights=pesos_dos_herois, k=1)[0]
+            market_slots.append(heroi_escolhido)
+            
         return market_slots
+
+    # --- FUNÇÃO AUXILIAR PARA CARREGAR IMAGEM ---
+    def get_agent_image(self, agent, size=(50, 50)):
+        """Carrega e redimensiona a imagem do agente. Retorna um placeholder se não encontrar."""
+        if agent.name in self.image_cache:
+            return self.image_cache[agent.name]
+
+        img_path = os.path.join(self.base_dir, "Imagens", agent.image_filename + ".png")
+        if(not os.path.exists(img_path)):
+            img_path = os.path.join(self.base_dir, "Imagens", agent.image_filename + ".jpg")
+        
+        if os.path.exists(img_path):
+            try:
+                img = Image.open(img_path)
+                img = img.resize(size, Image.Resampling.LANCZOS)
+                photo = ImageTk.PhotoImage(img)
+                self.image_cache[agent.name] = photo
+                return photo
+            except Exception:
+                pass # Caso dê falha ao ler o arquivo, cai no bloco abaixo
+        
+        # Cria um quadrado cinza vazio (Placeholder) caso o arquivo de imagem não exista
+        placeholder = Image.new("RGB", size, color="#555555")
+        photo = ImageTk.PhotoImage(placeholder)
+        self.image_cache[agent.name] = photo
+        return photo
 
     def create_shop_screen(self):
         self.clear_screen()
@@ -174,28 +240,52 @@ class GameGUI:
         main_frame = tk.Frame(self.root, bg="#1e1e1e")
         main_frame.pack(fill="both", expand=True, pady=10)
 
-        # Seção do Mercado (Esquerda)
+       # Seção do Mercado (Esquerda)
         market_frame = tk.LabelFrame(main_frame, text=" Mercado (4 slots) ", font=("Arial", 12, "bold"), fg="white", bg="#1e1e1e", labelanchor="n")
         market_frame.pack(side="left", fill="both", expand=True, padx=10, pady=5)
         
+        # Configura o market_frame para distribuir as duas colunas igualmente
+        market_frame.grid_columnconfigure(0, weight=1)
+        market_frame.grid_columnconfigure(1, weight=1)
+        market_frame.grid_rowconfigure(0, weight=1)
+        market_frame.grid_rowconfigure(1, weight=1)
+
         for i, agent in enumerate(self.market):
+            # Calcula a linha (row) e coluna (col) para fazer uma grade 2x2
+            row = i // 2
+            col = i % 2
+
             card = tk.Frame(market_frame, bg="#2a2a2a", bd=2, relief="groove")
-            card.pack(fill="x", padx=10, pady=5)
+            # Usamos .grid() em vez de .pack() para posicionar o quadrado na matriz 2x2
+            card.grid(row=row, column=col, padx=10, pady=10, sticky="nsew")
             
             if agent is None:
-                lbl = tk.Label(card, text="--------- COMPRADO ---------", font=("Arial", 12, "italic"), fg="#777777", bg="#2a2a2a", height=3)
-                lbl.pack(pady=10)
+                lbl = tk.Label(card, text=" COMPRADO ", font=("Arial", 12, "italic"), fg="#777777", bg="#2a2a2a")
+                lbl.pack(expand=True, pady=10)
             else:
                 color = self.rarity_colors.get(agent.rarity, "white")
-                title_lbl = tk.Label(card, text=f"[{i+1}] {agent.name} ({agent.type})", font=("Arial", 11, "bold"), fg=color, bg="#2a2a2a")
-                title_lbl.pack(anchor="w", padx=5, pady=2)
                 
-                stats_lbl = tk.Label(card, text=f"🪙 {agent.rarity}g | ⚔️ ATK:{agent.base_attack} 🛡️ DEF:{agent.base_defense} 🎯 PER:{agent.base_skill} ❤️ HP:{agent.max_life}", font=("Arial", 10), fg="#bbbbbb", bg="#2a2a2a")
-                stats_lbl.pack(anchor="w", padx=5)
+                # 1. Nome do personagem no topo do quadrado
+                title_lbl = tk.Label(card, text=f"[{i+1}] {agent.name}\n({self.mapping_types(agent.type)})", font=("Arial", 11, "bold"), fg=color, bg="#2a2a2a")
+                title_lbl.pack(pady=5)
                 
-                btn_buy = tk.Button(card, text="Comprar", bg="#4caf50", fg="white", font=("Arial", 9, "bold"), command=lambda idx=i: self.buy_agent(idx))
-                btn_buy.pack(side="right", padx=5, pady=2)
-
+                # 2. IMAGEM MAIOR (Aumentei o tamanho de 50x50 para 100x100)
+                # Você pode ajustar o (100, 100) abaixo para o tamanho que preferir!
+                img_label = tk.Label(card, image=self.get_agent_image(agent, (100, 100)), bg="#2a2a2a")
+                img_label.pack(pady=5)
+                
+                # 3. Atributos centralizados abaixo da imagem
+                if self.mode == "Difícil":
+                    stats_str = f"🪙 {agent.rarity}g\n⚔️ ATK: ?  🛡️ DEF: ?\n🎯 PER: ?  ❤️ HP: {agent.max_life}"
+                else: 
+                    stats_str = f"🪙 {agent.rarity}g\n⚔️ ATK: {agent.base_attack}  🛡️ DEF: {agent.base_defense}\n🎯 PER: {agent.base_skill}  ❤️ HP: {agent.max_life}"
+                stats_lbl = tk.Label(card, text=stats_str, font=("Arial", 10), fg="#bbbbbb", bg="#2a2a2a", justify="center")
+                stats_lbl.pack(pady=5)
+                
+                # 4. Botão de compra no rodapé do quadrado
+                btn_buy = tk.Button(card, text="Comprar", bg="#4caf50", fg="white", font=("Arial", 10, "bold"), command=lambda idx=i: self.buy_agent(idx))
+                btn_buy.pack(side="bottom", fill="x", padx=10, pady=5)
+                btn_buy.pack(side="bottom", fill="x", padx=10, pady=5)
         # Seção do Time (Direita)
         team_frame = tk.LabelFrame(main_frame, text=" Sua Equipe (Mín 1 / Máx 5) ", font=("Arial", 12, "bold"), fg="white", bg="#1e1e1e", labelanchor="n")
         team_frame.pack(side="right", fill="both", expand=True, padx=10, pady=5)
@@ -207,28 +297,33 @@ class GameGUI:
             card = tk.Frame(team_frame, bg="#333333", bd=1, relief="flat")
             card.pack(fill="x", padx=10, pady=5)
             
+            # --- CONTAINER DA IMAGEM NO TIME ---
+            img_label = tk.Label(card, image=self.get_agent_image(agent, (45, 45)), bg="#333333")
+            img_label.pack(side="left", padx=5, pady=5)
+            
+            info_container = tk.Frame(card, bg="#333333")
+            info_container.pack(side="left", fill="both", expand=True)
+
             color = self.rarity_colors.get(agent.rarity, "white")
-            title_lbl = tk.Label(card, text=f"{agent.name} ({agent.type})", font=("Arial", 11, "bold"), fg=color, bg="#333333")
+            title_lbl = tk.Label(info_container, text=f"{agent.name} ({self.mapping_types(agent.type)})", font=("Arial", 11, "bold"), fg=color, bg="#333333")
             title_lbl.pack(anchor="w", padx=5, pady=2)
             
             hp_str = f"❤️ Vida: {agent.current_life}/{agent.max_life}"
-            stats_lbl = tk.Label(card, text=f"{hp_str} | ⚔️ ATK:{agent.base_attack} 🛡️ DEF:{agent.base_defense} 🎯 PER:{agent.base_skill}", font=("Arial", 10), fg="#e0e0e0", bg="#333333")
+            stats_lbl = tk.Label(info_container, text=f"{hp_str} | ⚔️ ATK:{agent.base_attack} 🛡️ DEF:{agent.base_defense} 🎯 PER:{agent.base_skill}", font=("Arial", 10), fg="#e0e0e0", bg="#333333")
             stats_lbl.pack(anchor="w", padx=5)
             
-            btn_sell = tk.Button(card, text=f"Vender (+{agent.rarity}g)", bg="#f44336", fg="white", font=("Arial", 9), command=lambda idx=i: self.sell_agent(idx))
+            btn_sell = tk.Button(card, text=f"Vender (+{math.ceil(agent.rarity/2)}g)", bg="#f44336", fg="white", font=("Arial", 9), command=lambda idx=i: self.sell_agent(idx))
             btn_sell.pack(side="right", padx=5, pady=2)
     
     count = 1
     def reroll_shop(self):
-        global count
-
         if self.gold == self.count and len(self.team) < 1:
             messagebox.showwarning("Aviso", "É necessário ter moedas suficiente para um personagem!")
             return
 
-        if self.gold >= 1:
+        if self.gold >= self.count:
             self.gold -= self.count
-            self.count+=1
+            self.count += 1
             self.market = self.roll_market()
             self.create_shop_screen()
         else:
@@ -251,12 +346,11 @@ class GameGUI:
 
     def sell_agent(self, idx):
         removed = self.team.pop(idx)
-        self.gold += removed.rarity
+        self.gold += math.ceil(removed.rarity/2)
         self.create_shop_screen()
 
     def check_go_to_mission(self):
-        # Regras de falência tática compartilhadas
-        pode_dar_reroll = (self.gold >= 1)
+        pode_dar_reroll = (self.gold >= self.count)
         pode_comprar_algo = any(a is not None and self.gold >= a.rarity for a in self.market)
         esta_travado = (not pode_dar_reroll) and (not pode_comprar_algo)
 
@@ -264,10 +358,6 @@ class GameGUI:
             messagebox.showwarning("Aviso", "Sua equipe excede o limite máximo de 5 personagens!")
         elif len(self.team) == 0:
             messagebox.showwarning("Aviso", "Você não pode ir para a missão com o time vazio!")
-        else:
-            if esta_travado and len(self.team) < 3:
-                messagebox.showinfo("Exceção de Recursos", f"Falta de moedas detectada. Avançando com {len(self.team)} herói(s)!")
-            self.start_mission_phase()
 
     def start_mission_phase(self):
         self.clear_screen()
@@ -275,7 +365,12 @@ class GameGUI:
         themes = ["Ataque", "Defesa", "Perícia"]
         self.current_theme = random.choice(themes)
         
-        dc_table = {1: 10, 2: 13, 3: 16, 4: 20, 5: 25}
+        if self.mode == "Difícil":
+            dc_table = {1: 13, 2: 16, 3: 19, 4: 23, 5: 27}
+        
+        else: 
+            dc_table = {1: 10, 2: 13, 3: 16, 4: 20, 5: 25}
+
         base_dc = dc_table[self.current_level]
         self.dc = max(1, base_dc - self.round_bonuses["DC_Reduction"])
         
@@ -284,7 +379,6 @@ class GameGUI:
         self.falhas = 0
         self.teste_num = 1
         
-        # Frame de logs e painel da batalha
         self.battle_frame = tk.Frame(self.root, bg="#121212")
         self.battle_frame.pack(fill="both", expand=True, padx=20, pady=20)
         
@@ -294,7 +388,13 @@ class GameGUI:
         self.lbl_dc_info = tk.Label(self.battle_frame, text=f"Dificuldade Alvo (DC): {self.dc}  (DC Base: {base_dc})", font=("Arial", 12), fg="white", bg="#121212")
         self.lbl_dc_info.pack()
 
-        self.log_txt = tk.Text(self.battle_frame, bg="#1e1e1e", fg="#00ff00", font=("Consolas", 11), height=15, state="disabled")
+        # Adicionado um painel para exibir o herói ativo que vai rolar os dados na missão
+        self.hero_battle_panel = tk.Frame(self.battle_frame, bg="#121212")
+        self.hero_battle_panel.pack(pady=5)
+        self.lbl_battle_img = tk.Label(self.hero_battle_panel, bg="#121212")
+        self.lbl_battle_img.pack()
+
+        self.log_txt = tk.Text(self.battle_frame, bg="#1e1e1e", fg="#00ff00", font=("Consolas", 11), height=12, state="disabled")
         self.log_txt.pack(fill="x", pady=10, padx=10)
         
         self.btn_roll = tk.Button(self.battle_frame, text="🎲 ROLAR DADO (TESTE 1/5)", font=("Arial", 14, "bold"), bg="#e91e63", fg="white", height=2, command=self.next_test_roll)
@@ -328,14 +428,17 @@ class GameGUI:
                 self.best_hero = a
                 
         self.btn_roll.config(text=f"🎲 ROLAR PARA {self.best_hero.name.upper()} (Total: {self.best_val}) [Teste {self.teste_num}/5]")
-        lbl_title = tk.Label(text=f"RESULTADO FINAL: {self.sucessos} SUCESSOS | {self.falhas} FALHAS", font=("Arial", 16, "bold"), fg="white", bg="#1e1e1e")
+        
+        # --- ATUALIZA A IMAGEM DO HERÓI NA TELA DE BATALHA ---
+        battle_photo = self.get_agent_image(self.best_hero, (80, 80))
+        self.lbl_battle_img.config(image=battle_photo)
 
     def next_test_roll(self):
         d20 = random.randint(1, 20)
         total = self.best_val + d20
         
         self.append_log(f"\n--- TESTE {self.teste_num}/5 ({self.best_hero.name}) ---")
-        self.append_log(f"Resultado do dado: Total: {total} vs Alvo {self.dc}")
+        self.append_log(f"Resultado do dado: {d20} | Total: {total} vs Alvo {self.dc}")
         
         if self.mode == "Difícil" and d20 == 20:
             self.append_log("🌟 CRÍTICO POSITIVO! Contando como 2 SUCESSOS!")
@@ -486,6 +589,5 @@ class GameGUI:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    # Nome exato da sua planilha contendo os heróis
     app = GameGUI(root, "plano.csv")
     root.mainloop()
