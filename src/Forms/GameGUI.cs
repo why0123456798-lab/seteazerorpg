@@ -1,6 +1,7 @@
 ﻿using CsvHelper;
 using System.Drawing.Drawing2D;
 using System.Globalization;
+using System.Reflection;
 
 public class GameGUI : Form
 {
@@ -38,9 +39,8 @@ public class GameGUI : Form
     private Button btnRoll;
     private PictureBox pbBattleHero;
 
-    public GameGUI(string csvPath)
+    public GameGUI()
     {
-        this.csvPath = csvPath;
         this.Text = "RPG Autobattler Roguelike";
         this.Size = new Size(970, 740);
         this.StartPosition = FormStartPosition.CenterScreen;
@@ -67,22 +67,19 @@ public class GameGUI : Form
 
     private void LoadDatabase()
     {
-        string fullPath = Path.Combine(baseDir, csvPath);
-        if (!File.Exists(fullPath))
-        {
-            MessageBox.Show($"Arquivo {csvPath} não encontrado no diretório atual.", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            Environment.Exit(0);
-        }
-
         try
         {
-            using (var reader = new StreamReader(fullPath))
-            using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
+            var assembly = Assembly.GetExecutingAssembly();
+            using (Stream stream = assembly.GetManifestResourceStream("RPGBattleMaker.Data.plano.csv"))
+            using (StreamReader reader = new StreamReader(stream))
             {
-                var records = csv.GetRecords<dynamic>().ToList();
-                foreach (var row in records)
+                using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
                 {
-                    allAgents.Add(new Agent(row));
+                    var records = csv.GetRecords<dynamic>().ToList();
+                    foreach (var row in records)
+                    {
+                        allAgents.Add(new Agent(row));
+                    }
                 }
             }
         }
