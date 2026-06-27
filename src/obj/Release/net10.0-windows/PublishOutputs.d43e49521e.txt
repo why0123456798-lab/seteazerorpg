@@ -1,0 +1,6 @@
+C:\Users\vic_p\Documents\seteazerorpg\src\bin\Release\net10.0-windows\publish\RPGBattleMaker.exe
+C:\Users\vic_p\Documents\seteazerorpg\src\bin\Release\net10.0-windows\publish\RPGBattleMaker.dll
+C:\Users\vic_p\Documents\seteazerorpg\src\bin\Release\net10.0-windows\publish\RPGBattleMaker.deps.json
+C:\Users\vic_p\Documents\seteazerorpg\src\bin\Release\net10.0-windows\publish\RPGBattleMaker.runtimeconfig.json
+C:\Users\vic_p\Documents\seteazerorpg\src\bin\Release\net10.0-windows\publish\RPGBattleMaker.pdb
+C:\Users\vic_p\Documents\seteazerorpg\src\bin\Release\net10.0-windows\publish\CsvHelper.dll

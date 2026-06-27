@@ -95,10 +95,10 @@ public class GameGUI : Form
 
     private string MappingTypes(string agentType)
     {
-        if (agentType == "Lutador") return "⚔️";
-        if (agentType == "Defensor") return "🛡️";
-        if (agentType == "Especialista") return "🎯";
-        if (agentType == "Suporte") return "❤️";
+        if (agentType == AgentType.Lutador) return "⚔️";
+        if (agentType == AgentType.Defensor) return "🛡️";
+        if (agentType == AgentType.Especialista) return "🎯";
+        if (agentType == AgentType.Suporte) return "❤️";
         return agentType;
     }
 
@@ -110,7 +110,7 @@ public class GameGUI : Form
         currentLevel = 1;
         mode = "Difícil";
         rerollCount = 1;
-        roundBonuses = new Dictionary<string, int> { { "Ataque", 0 }, { "Defesa", 0 }, { "Escudo", 0 }, { "DC_Reduction", 0 } };
+        roundBonuses = new Dictionary<string, int> { { Agent.Ataque, 0 }, { Agent.Defesa, 0 }, { "Escudo", 0 }, { "DC_Reduction", 0 } };
         market.Clear();
     }
 
@@ -381,7 +381,7 @@ public class GameGUI : Form
                 };
                 card.Controls.Add(statsLbl);
 
-                var synergyStr = agent.GetSynergyHero(agent);
+                var synergyStr = agent.GetSynergyName(agent);
 
                 Label synergyLbl = new Label
                 {
@@ -443,7 +443,7 @@ public class GameGUI : Form
             Label statsLbl = new Label { Text = $"{hpStr} | ⚔️ ATK:{agent.BaseAttack} 🛡️ DEF:{agent.BaseDefense} 🎯 PER:{agent.BaseSkill}", Font = new Font("Arial", 8.5f), ForeColor = Color.White, Location = new Point(55, 28), AutoSize = true };
             card.Controls.Add(statsLbl);
 
-            string synergyName = agent.GetSynergyHero(agent);
+            string synergyName = agent.GetSynergyName(agent);
             Label synergyLbl = new Label { Text = $"{synergyName}", Font = new Font("Arial", 8.5f), ForeColor = Color.Orange, Location = new Point(55, 43), AutoSize = true };
             card.Controls.Add(synergyLbl);
 
@@ -540,7 +540,7 @@ public class GameGUI : Form
     {
         ClearScreen();
 
-        string[] themes = { "Ataque", "Defesa", "Perícia" };
+        string[] themes = { Agent.Ataque, Agent.Defesa, Agent.Pericia };
         currentTheme = themes[random.Next(themes.Length)];
 
         Dictionary<int, int> dcTable = mode == "Difícil" ?
@@ -644,8 +644,8 @@ public class GameGUI : Form
         foreach (var a in aliveHeroes)
         {
             int val = a.GetAttr(currentTheme, team) + a.GetSynergyBonus(aliveHeroes);
-            if (currentTheme == "Ataque") val += roundBonuses["Ataque"];
-            else if (currentTheme == "Defesa") val += roundBonuses["Defesa"];
+            if (currentTheme == Agent.Ataque) val += roundBonuses[Agent.Ataque];
+            else if (currentTheme == Agent.Defesa) val += roundBonuses[Agent.Defesa];
 
             if (val > bestVal)
             {
@@ -817,10 +817,10 @@ public class GameGUI : Form
         ClearScreen();
         gold += 5; // Salário Base
 
-        int suportes = Math.Min(3, team.Count(a => a.Type == "Suporte" && a.CurrentLife > 0));
-        int defensores = Math.Min(3, team.Count(a => a.Type == "Defensor" && a.CurrentLife > 0));
-        int lutadores = Math.Min(3, team.Count(a => a.Type == "Lutador" && a.CurrentLife > 0));
-        int especialistas = Math.Min(3, team.Count(a => a.Type == "Especialista" && a.CurrentLife > 0));
+        int suportes = Math.Min(3, team.Count(a => a.Type == AgentType.Suporte && a.CurrentLife > 0));
+        int defensores = Math.Min(3, team.Count(a => a.Type == AgentType.Defensor && a.CurrentLife > 0));
+        int lutadores = Math.Min(3, team.Count(a => a.Type == AgentType.Lutador && a.CurrentLife > 0));
+        int especialistas = Math.Min(3, team.Count(a => a.Type == AgentType.Especialista && a.CurrentLife > 0));
 
         Panel frame = new Panel { Size = new Size(500, 450), BackColor = Color.Transparent };
         frame.Location = new Point((mainPanel.Width - frame.Width) / 2, (mainPanel.Height - frame.Height) / 2);
@@ -857,8 +857,8 @@ public class GameGUI : Form
         roundBonuses["Escudo"] = defensores;
         if (defensores > 0) logBox.AppendText($"🛡️ {defensores} Defensor(es): +{defensores} de Escudo para o próximo andar.\r\n");
 
-        roundBonuses["Ataque"] = lutadores;
-        roundBonuses["Defesa"] = lutadores;
+        roundBonuses[Agent.Ataque] = lutadores;
+        roundBonuses[Agent.Defesa] = lutadores;
         if (lutadores > 0) logBox.AppendText($"🔥 {lutadores} Lutador(es): +{lutadores} de Fúria nos testes seguintes.\r\n");
 
         roundBonuses["DC_Reduction"] = especialistas;
