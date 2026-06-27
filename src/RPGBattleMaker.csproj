@@ -12,11 +12,11 @@
 		<PackageReference Include="CsvHelper" Version="33.1.0" />
 	</ItemGroup>
 	<ItemGroup>
-		<None Update="shared\plano.csv">
+		<None Update="Data\plano.csv">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 
-		<None Update="shared\images\**\*.*">
+		<None Update="Shared\Images\**\*.*">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 	</ItemGroup>

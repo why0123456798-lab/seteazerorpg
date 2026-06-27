@@ -4,10 +4,10 @@
     <_LastSelectedProfileId>C:\Users\vic_p\Documents\seteazerorpg\src\Properties\PublishProfiles\FolderProfile.pubxml</_LastSelectedProfileId>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Update="GameGUI.cs">
+    <Compile Update="Forms\GameGUI.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Update="InitialScreen.cs">
+    <Compile Update="Forms\InitialScreen.cs">
       <SubType>Form</SubType>
     </Compile>
   </ItemGroup>
