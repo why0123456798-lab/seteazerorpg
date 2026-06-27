@@ -2,19 +2,20 @@
 using Microsoft.Data.Sqlite;
 using RPGBattleMaker.Data;
 using RPGBattleMaker.Data.Interface;
+using RPGBattleMaker.Infrastructure;
+using RPGBattleMaker.Infrastructure.Interface;
 using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Reflection;
 
 public class GameGUI : Form
 {
+    #region Private List
     private readonly IDbContext _dbContext;
-    private readonly IAgentRepository _agentRepository;
+    private readonly IAgentService _agentService;
+    private readonly IGameService _gameService;
 
-    private string csvPath;
-    private string baseDir;
     private List<Agent> allAgents = new List<Agent>();
-    private Dictionary<string, Image> imageCache = new Dictionary<string, Image>();
     private Random random = new Random();
 
     // Estado do Jogo
@@ -45,10 +46,13 @@ public class GameGUI : Form
     private Button btnRoll;
     private Label lblHeroStats;
     private PictureBox pbBattleHero;
+    #endregion
 
-    public GameGUI(IDbContext dbContext, IAgentRepository agentRepository)
+    #region Constructor
+    public GameGUI(IDbContext dbContext, IAgentService agentService, IGameService gameService)
     {
-        _agentRepository = agentRepository;
+        _agentService = agentService;
+        _gameService = gameService;
         _dbContext = dbContext;
   
         this.Text = "RPG Autobattler Roguelike";
@@ -65,28 +69,13 @@ public class GameGUI : Form
                 { 5, ColorTranslator.FromHtml("#ff9800") }
             };
 
-        baseDir = AppDomain.CurrentDomain.BaseDirectory;
-
-        #region Populate Data from DB
-        _dbContext.InitializeDatabase().Wait();
-        _agentRepository.GetAllHeroes(allAgents).Wait();
-        #endregion
-
         mainPanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
         this.Controls.Add(mainPanel);
 
         ResetGameState();
         CreateModeSelectionScreen();
     }
-
-    private string MappingTypes(string agentType)
-    {
-        if (agentType == AgentType.Lutador) return "⚔️";
-        if (agentType == AgentType.Defensor) return "🛡️";
-        if (agentType == AgentType.Especialista) return "🎯";
-        if (agentType == AgentType.Suporte) return "❤️";
-        return agentType;
-    }
+    #endregion
 
     private void ResetGameState()
     {
@@ -98,6 +87,11 @@ public class GameGUI : Form
         rerollCount = 1;
         roundBonuses = new Dictionary<string, int> { { Agent.Ataque, 0 }, { Agent.Defesa, 0 }, { "Escudo", 0 }, { "DC_Reduction", 0 } };
         market.Clear();
+
+        #region Populate Data from DB
+        _dbContext.InitializeDatabase().Wait();
+        _agentService.GetAllHeroes(allAgents).Wait();
+        #endregion
     }
 
     private void ClearScreen()
@@ -105,9 +99,7 @@ public class GameGUI : Form
         mainPanel.Controls.Clear();
     }
 
-    // ==========================================
-    // TELA 1: SELEÇÃO DE MODO
-    // ==========================================
+    # region TELA 1: SELEÇÃO DE MODO
     private void CreateModeSelectionScreen()
     {
         ClearScreen();
@@ -139,7 +131,7 @@ public class GameGUI : Form
             Top = 130,
             FlatStyle = FlatStyle.Flat
         };
-        btnNormal.Click += (s, e) => StartGame("Normal");
+        btnNormal.Click += (s, e) => StartGame("Normal").Wait();
         centerFrame.Controls.Add(btnNormal);
 
         Button btnHard = new Button
@@ -153,100 +145,19 @@ public class GameGUI : Form
             Top = 210,
             FlatStyle = FlatStyle.Flat
         };
-        btnHard.Click += (s, e) => StartGame("Difícil");
+        btnHard.Click += (s, e) => StartGame("Difícil").Wait();
         centerFrame.Controls.Add(btnHard);
     }
 
-    private void StartGame(string chosenMode)
+    private async Task StartGame(string chosenMode)
     {
         mode = chosenMode;
-        market = RollMarket();
-        CreateShopScreen();
+        market = _gameService.RollMarket(team, allAgents);
+        await CreateShopScreen();
     }
+    #endregion
 
-    private List<Agent> GetMarketPool()
-    {
-        var teamNames = team.Select(a => a.Name).ToList();
-        return allAgents.Where(a => !teamNames.Contains(a.Name)).ToList();
-    }
-
-    private List<Agent> RollMarket()
-    {
-        var pool = GetMarketPool();
-        if (pool.Count == 0) return new List<Agent>();
-
-        var rarityWeights = new Dictionary<int, double> { { 1, 0.40 }, { 2, 0.30 }, { 3, 0.15 }, { 4, 0.10 }, { 5, 0.05 } };
-        List<Agent> marketSlots = new List<Agent>();
-        int slotsNecessarios = Math.Min(4, pool.Count);
-
-        while (marketSlots.Count < slotsNecessarios)
-        {
-            var opcoesDisponiveis = pool.Where(a => !marketSlots.Contains(a)).ToList();
-            if (opcoesDisponiveis.Count == 0) break;
-
-            var pesos = opcoesDisponiveis.Select(a => rarityWeights.ContainsKey(a.Rarity) ? rarityWeights[a.Rarity] : 0.0).ToList();
-            if (pesos.Sum() == 0) pesos = Enumerable.Repeat(1.0, opcoesDisponiveis.Count).ToList();
-
-            // Roleta ponderada simples
-            double sum = pesos.Sum();
-            double r = random.NextDouble() * sum;
-            double currentSum = 0;
-            Agent chosen = opcoesDisponiveis.Last();
-
-            for (int i = 0; i < opcoesDisponiveis.Count; i++)
-            {
-                currentSum += pesos[i];
-                if (r <= currentSum)
-                {
-                    chosen = opcoesDisponiveis[i];
-                    break;
-                }
-            }
-            marketSlots.Add(chosen);
-        }
-        return marketSlots;
-    }
-
-    // Redimensiona imagens igual à lógica do Pillow
-    private Image GetAgentImage(Agent agent, Size size)
-    {
-        string cacheKey = $"{agent.Name}_{size.Width}x{size.Height}";
-        if (imageCache.ContainsKey(cacheKey)) return imageCache[cacheKey];
-
-        string imgPath = Path.Combine(baseDir, "shared/images", agent.ImageFilename + ".png");
-        if (!File.Exists(imgPath)) imgPath = Path.Combine(baseDir, "shared/images", agent.ImageFilename + ".jpg");
-
-        if (File.Exists(imgPath))
-        {
-            try
-            {
-                Image rawImg = Image.FromFile(imgPath);
-                Bitmap resized = new Bitmap(size.Width, size.Height);
-                using (Graphics g = Graphics.FromImage(resized))
-                {
-                    g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                    g.DrawImage(rawImg, 0, 0, size.Width, size.Height);
-                }
-                rawImg.Dispose();
-                imageCache[cacheKey] = resized;
-                return resized;
-            }
-            catch { }
-        }
-
-        // Placeholder caso a imagem falte
-        Bitmap placeholder = new Bitmap(size.Width, size.Height);
-        using (Graphics g = Graphics.FromImage(placeholder))
-        {
-            g.Clear(ColorTranslator.FromHtml("#555555"));
-        }
-        imageCache[cacheKey] = placeholder;
-        return placeholder;
-    }
-
-    // ==========================================
-    // TELA 2: LOJA / MERCADO
-    // ==========================================
+    #region TELA 2: LOJA / MERCADO
     private async Task CreateShopScreen()
     {
         ClearScreen();
@@ -276,7 +187,7 @@ public class GameGUI : Form
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
             FlatStyle = FlatStyle.Flat
         };
-        btnMission.Click += (s, e) => CheckGoToMission();
+        btnMission.Click += (s, e) => CheckGoToMission().Wait();
         topFrame.Controls.Add(btnMission);
 
         Button btnReroll = new Button
@@ -290,7 +201,7 @@ public class GameGUI : Form
             Anchor = AnchorStyles.Top | AnchorStyles.Right,
             FlatStyle = FlatStyle.Flat
         };
-        btnReroll.Click += (s, e) => RerollShop();
+        btnReroll.Click += (s, e) => RerollShop().Wait();
         topFrame.Controls.Add(btnReroll);
 
         // Conteineres do Mercado e Time
@@ -330,18 +241,18 @@ public class GameGUI : Form
 
                 Label titleLbl = new Label
                 {
-                    Text = $"{agent.Name}\n({MappingTypes(agent.Type)})",
+                    Text = $"{agent.Name}\n({AgentHelper.MappingTypes(agent.Type)})",
                     Font = new Font("Arial", 10, FontStyle.Bold),
                     ForeColor = rarityColor,
                     TextAlign = ContentAlignment.TopCenter,
                     Dock = DockStyle.Top,
-                    Height = 35
+                    Height = 35 
                 };
                 card.Controls.Add(titleLbl);
 
                 PictureBox pb = new PictureBox
                 {
-                    Image = GetAgentImage(agent, new Size(90, 90)),
+                    Image = await _agentService.GetAgentImage(agent, new Size(90, 90)),
                     Size = new Size(90, 90),
                     SizeMode = PictureBoxSizeMode.CenterImage,
                     Left = (card.Width - 90) / 2,
@@ -392,7 +303,7 @@ public class GameGUI : Form
                     Height = 30,
                     FlatStyle = FlatStyle.Flat
                 };
-                btnBuy.Click += (s, e) => BuyAgent(index);
+                btnBuy.Click += (s, e) => BuyAgent(index).Wait();
                 card.Controls.Add(btnBuy);
             }
         }
@@ -418,11 +329,11 @@ public class GameGUI : Form
             Panel card = new Panel { Size = new Size(360, 60), BackColor = ColorTranslator.FromHtml("#333333"), Margin = new Padding(0, 5, 0, 5) };
             teamList.Controls.Add(card);
 
-            PictureBox pb = new PictureBox { Image = GetAgentImage(agent, new Size(45, 45)), Size = new Size(45, 45), Location = new Point(5, 7) };
+            PictureBox pb = new PictureBox { Image = await _agentService.GetAgentImage(agent, new Size(45, 45)), Size = new Size(45, 45), Location = new Point(5, 7) };
             card.Controls.Add(pb);
 
             Color rarityColor = rarityColors.ContainsKey(agent.Rarity) ? rarityColors[agent.Rarity] : Color.White;
-            Label titleLbl = new Label { Text = $"{agent.Name} ({MappingTypes(agent.Type)})", Font = new Font("Arial", 10, FontStyle.Bold), ForeColor = rarityColor, Location = new Point(55, 5), AutoSize = true };
+            Label titleLbl = new Label { Text = $"{agent.Name} ({AgentHelper.MappingTypes(agent.Type)})", Font = new Font("Arial", 10, FontStyle.Bold), ForeColor = rarityColor, Location = new Point(55, 5), AutoSize = true };
             card.Controls.Add(titleLbl);
 
             string hpStr = $"❤️ Vida: {agent.CurrentLife}/{agent.MaxLife}";
@@ -443,12 +354,12 @@ public class GameGUI : Form
                 Location = new Point(300, 15),
                 FlatStyle = FlatStyle.Flat
             };
-            btnSell.Click += (s, e) => SellAgent(index);
+            btnSell.Click += (s, e) => SellAgent(index).Wait();
             card.Controls.Add(btnSell);
         }
     }
 
-    private void RerollShop()
+    private async Task RerollShop()
     {
         if (gold == rerollCount && team.Count < 1)
         {
@@ -460,8 +371,8 @@ public class GameGUI : Form
         {
             gold -= rerollCount;
             rerollCount++;
-            market = RollMarket();
-            CreateShopScreen();
+            market = _gameService.RollMarket(team, allAgents);
+            await CreateShopScreen();
         }
         else
         {
@@ -469,7 +380,7 @@ public class GameGUI : Form
         }
     }
 
-    private void BuyAgent(int idx)
+    private async Task BuyAgent(int idx)
     {
         Agent agent = market[idx];
         if (agent == null) return;
@@ -481,7 +392,7 @@ public class GameGUI : Form
                 gold -= agent.Rarity;
                 team.Add(agent);
                 market[idx] = null;
-                CreateShopScreen();
+                await CreateShopScreen();
             }
             else
             {
@@ -494,15 +405,15 @@ public class GameGUI : Form
         }
     }
 
-    private void SellAgent(int idx)
+    private async Task SellAgent(int idx)
     {
         Agent removed = team[idx];
         team.RemoveAt(idx);
         gold += (int)Math.Ceiling(removed.Rarity / 2.0);
-        CreateShopScreen();
+        await CreateShopScreen();
     }
 
-    private void CheckGoToMission()
+    private async Task CheckGoToMission()
     {
         if (team.Count > 5)
         {
@@ -514,15 +425,13 @@ public class GameGUI : Form
         }
         else
         {
-            StartMissionPhase();
+            await StartMissionPhase();
         }
     }
+    #endregion
 
-    #region Batalha
-    // ==========================================
-    // TELA 3: TELA DE BATALHA / MISSÃO
-    // ==========================================
-    private void StartMissionPhase()
+    #region TELA 3: TELA DE BATALHA / MISSÃO
+    private async Task StartMissionPhase()
     {
         ClearScreen();
 
@@ -619,14 +528,14 @@ public class GameGUI : Form
             Anchor = AnchorStyles.Top,
             FlatStyle = FlatStyle.Flat
         };
-        btnRoll.Click += (s, e) => NextTestRoll();
+        btnRoll.Click += (s, e) => NextTestRoll().Wait();
         battleFrame.Controls.Add(btnRoll);
 
-        AppendLog("Fase preparada. Identificando combatentes viáveis...", Color.White);
-        SetupNextCombatantInfo();
+        await AppendLog("Fase preparada. Identificando combatentes viáveis...", Color.White);
+        await SetupNextCombatantInfo();
     }
 
-    private void AppendLog(string text, Color color)
+    private async Task AppendLog(string text, Color color)
     {
         logTxt.SelectionStart = logTxt.TextLength;
         logTxt.SelectionLength = 0;
@@ -636,12 +545,12 @@ public class GameGUI : Form
         logTxt.ScrollToCaret();
     }
 
-    private void SetupNextCombatantInfo()
+    private async Task SetupNextCombatantInfo()
     {
         var aliveHeroes = team.Where(a => a.CurrentLife > 0).ToList();
         if (aliveHeroes.Count == 0 || falhas >= 3)
         {
-            EndMissionCalculations();
+            await EndMissionCalculations();
             return;
         }
 
@@ -665,44 +574,44 @@ public class GameGUI : Form
 
         lblHeroStats.Text = $"{currentTheme}: {setValueExibition} Fadiga: {bestHero.Fatigue.FirstOrDefault(f => f.Key == currentTheme).Value}";
         btnRoll.Text = $"🎲 ROLAR PARA {bestHero.Name.ToUpper()} (Total: {bestVal}) [Teste {testeNum}/5]";
-        pbBattleHero.Image = GetAgentImage(bestHero, new Size(80, 80));
+        pbBattleHero.Image = await _agentService.GetAgentImage(bestHero, new Size(80, 80));
     }
 
-    private void NextTestRoll()
+    private async Task NextTestRoll()
     {
         if (btnRoll.Text == "VER RESULTADO FINAL")
         {
-            EndMissionCalculations();
+            await EndMissionCalculations();
             return;
         }
 
         int d20 = random.Next(1, 21);
         int total = bestVal + d20;
 
-        AppendLog($"\n--- TESTE {testeNum}/5 ({bestHero.Name}) ---", Color.White);
-        AppendLog($"Resultado do dado: {d20} | Total: {total} vs Alvo {dc}", Color.White);
+        await AppendLog($"\n--- TESTE {testeNum}/5 ({bestHero.Name}) ---", Color.White);
+        await AppendLog($"Resultado do dado: {d20} | Total: {total} vs Alvo {dc}", Color.White);
 
         if (mode == "Difícil" && d20 == 20)
         {
-            AppendLog("🌟 CRÍTICO POSITIVO! Contando como 2 SUCESSOS!", Color.Green);
+            await AppendLog("🌟 CRÍTICO POSITIVO! Contando como 2 SUCESSOS!", Color.Green);
             sucessos += 2;
         }
         else if (mode == "Difícil" && d20 == 1)
         {
-            AppendLog("💀 CRÍTICO NEGATIVO! 1 Falha Crítica anotada.", Color.Red);
+            await AppendLog("💀 CRÍTICO NEGATIVO! 1 Falha Crítica anotada.", Color.Red);
             falhas += 2;
-            ApplyGuiDamage(bestHero, currentLevel * 2);
+            await ApplyGuiDamage(bestHero, currentLevel * 2);
         }
         else if (total >= dc)
         {
-            AppendLog("🟢 SUCESSO!", Color.Green);
+            await AppendLog("🟢 SUCESSO!", Color.Green);
             sucessos += 1;
         }
         else
         {
-            AppendLog("🔴 FALHA!", Color.Red);
+            await AppendLog("🔴 FALHA!", Color.Red);
             falhas += 1;
-            ApplyGuiDamage(bestHero, currentLevel);
+            await ApplyGuiDamage(bestHero, currentLevel);
         }
 
         if (!bestHero.Fatigue.ContainsKey(currentTheme)) bestHero.Fatigue[currentTheme] = 0;
@@ -717,53 +626,50 @@ public class GameGUI : Form
         }
         else
         {
-            SetupNextCombatantInfo();
+            await SetupNextCombatantInfo();
         }
     }
 
-    private void ApplyGuiDamage(Agent hero, int dano)
+    private async Task ApplyGuiDamage(Agent hero, int dano)
     {
         if (shields.ContainsKey(hero.Name) && shields[hero.Name] > 0)
         {
             if (shields[hero.Name] >= dano)
             {
                 shields[hero.Name] -= dano;
-                AppendLog($"🛡️ Escudo absorveu o golpe completamente. Restante: {shields[hero.Name]}", Color.Cyan);
+                await AppendLog($"🛡️ Escudo absorveu o golpe completamente. Restante: {shields[hero.Name]}", Color.Cyan);
                 return;
             }
             else
             {
                 dano -= shields[hero.Name];
-                AppendLog($"🛡️ Escudo quebrou! Absorveu parte. {dano} de dano vaza para o HP.", Color.Orange);
+                await AppendLog($"🛡️ Escudo quebrou! Absorveu parte. {dano} de dano vaza para o HP.", Color.Orange);
                 shields[hero.Name] = 0;
             }
         }
 
         hero.CurrentLife -= dano;
-        AppendLog($"💥 Dano sofrido por {hero.Name}: {dano} HP. Atual: {Math.Max(0, hero.CurrentLife)}/{hero.MaxLife}", Color.LightPink);
+        await AppendLog($"💥 Dano sofrido por {hero.Name}: {dano} HP. Atual: {Math.Max(0, hero.CurrentLife)}/{hero.MaxLife}", Color.LightPink);
 
         if (hero.CurrentLife <= 0)
         {
             if (mode == "Difícil")
             {
-                AppendLog($"☠️ PERMADEATH: {hero.Name} morreu e foi expurgado da equipe.", Color.Red);
+                await AppendLog($"☠️ PERMADEATH: {hero.Name} morreu e foi expurgado da equipe.", Color.Red);
                 team.Remove(hero);
             }
             else
             {
                 hero.CurrentLife = 0;
-                AppendLog($"💤 NOCAUTE: {hero.Name} desmaiou.", Color.Yellow);
+                await AppendLog($"💤 NOCAUTE: {hero.Name} desmaiou.", Color.Yellow);
             }
         }
     }
 
     #endregion
 
-    #region Resultado Final
-    // ==========================================
-    // TELA 4: RESULTADO FINAL
-    // ==========================================
-    private void EndMissionCalculations()
+    #region TELA 4: Resultado Final
+    private async Task EndMissionCalculations()
     {
         ClearScreen();
 
@@ -812,17 +718,14 @@ public class GameGUI : Form
             frame.Controls.Add(lblRes);
 
             Button btnContinue = new Button { Text = "AVANÇAR PARA DESCANSO", Font = new Font("Arial", 11, FontStyle.Bold), BackColor = ColorTranslator.FromHtml("#4caf50"), ForeColor = Color.White, Size = new Size(220, 45), Left = 140, Top = 200, FlatStyle = FlatStyle.Flat };
-            btnContinue.Click += (s, e) => NextLevelRestPhase();
+            btnContinue.Click += (s, e) => NextLevelRestPhase().Wait();
             frame.Controls.Add(btnContinue);
         }
     }
     #endregion
 
-    #region Tela Descanso
-    // ==========================================
-    // TELA 5: FASE DE DESCANSO
-    // ==========================================
-    private void NextLevelRestPhase()
+    #region TELA 5: Fase Descanso
+    private async Task NextLevelRestPhase()
     {
         ClearScreen();
         gold += 5; // Salário Base
@@ -887,9 +790,9 @@ public class GameGUI : Form
         {
             btnNext.Text = "IR PARA A LOJA 🛒";
             btnNext.Click += (s, e) => {
-                market = RollMarket();
+                market = _gameService.RollMarket(team, allAgents);
                 rerollCount = 1;
-                CreateShopScreen();
+                CreateShopScreen().Wait();
             };
         }
         frame.Controls.Add(btnNext);

@@ -15,26 +15,6 @@
     }
 
     public List<SynergyGroup> Groups { get; set; }
-
-    private static readonly string S_Irmas = "Irmãs";
-    private static readonly string S_Irmaos = "Irmãos";
-    private static readonly string S_HaraKiri = "Hara-Kiri";
-    private static readonly string S_Lider = "Líder";
-    private static readonly string S_AChama = "A Chama";
-    private static readonly string S_Trindade = "Trindade";
-    private static readonly string S_Amor = "Amor";
-    private static readonly string S_CasalReal = "Casal Real";
-    private static readonly string S_AmorPlatonico = "Amor Platônico";
-    private static readonly string S_Ordem = "Ordem";
-    private static readonly string S_NovaOrdem = "Nova Ordem";
-    private static readonly string S_Uagamora = "Uagamora";
-    private static readonly string S_Solo = "Solo";
-    private static readonly string S_NinhoDragao = "Ninho do Dragão";
-    private static readonly string S_Dragao = "Dragão";
-    private static readonly string S_Caos = "Caos";
-    private static readonly string S_Viloes = "Vilões";
-    private static readonly string S_Vendedores = "Vendedores";
-    private static readonly string S_Fe = "Fé";
     public SynergyAgents()
     {
 

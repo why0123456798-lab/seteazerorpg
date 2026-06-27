@@ -19,7 +19,6 @@ namespace RPGBattleMaker.Data
             {
                 connection.Open();
 
-                // 1. Cria a tabela se ela ainda não existir
                 string createTableQuery = @"
             CREATE TABLE IF NOT EXISTS Agentes (
                 Agente TEXT, Tipo TEXT, Descricao TEXT, Player TEXT, 

@@ -4,6 +4,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RPGBattleMaker.Data;
 using RPGBattleMaker.Data.Interface;
+using RPGBattleMaker.Infrastructure;
+using RPGBattleMaker.Infrastructure.Interface;
 
 namespace RPGBattleMaker
 {
@@ -21,8 +23,12 @@ namespace RPGBattleMaker
             ServiceHost = Host.CreateDefaultBuilder()
                 .ConfigureServices((context, services) =>
                 {
-                    services.AddSingleton<IAgentRepository, AgentRepository>();
                     services.AddSingleton<IDbContext, DbContext>();
+
+                    services.AddSingleton<IAgentRepository, AgentRepository>();
+
+                    services.AddSingleton<IAgentService, AgentService>();
+                    services.AddSingleton<IGameService, GameService>();
 
                     services.AddTransient<GameGUI>();
                 })
