@@ -63,7 +63,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Perdigas");
                         insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
                         insertCmd.Parameters.AddWithValue("$raridade", 5);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Ordem,Fé");
                         insertCmd.Parameters.AddWithValue("$ataque", 2);
                         insertCmd.Parameters.AddWithValue("$defesa", 2);
                         insertCmd.Parameters.AddWithValue("$vida", 8);
@@ -75,7 +75,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Maria Cecília");
                         insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
                         insertCmd.Parameters.AddWithValue("$raridade", 5);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Ordem,Nova Ordem");
                         insertCmd.Parameters.AddWithValue("$ataque", 2);
                         insertCmd.Parameters.AddWithValue("$defesa", 16);
                         insertCmd.Parameters.AddWithValue("$vida", 8);
