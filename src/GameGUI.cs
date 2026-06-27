@@ -227,8 +227,8 @@ public class GameGUI : Form
         string cacheKey = $"{agent.Name}_{size.Width}x{size.Height}";
         if (imageCache.ContainsKey(cacheKey)) return imageCache[cacheKey];
 
-        string imgPath = Path.Combine(baseDir, "Imagens", agent.ImageFilename + ".png");
-        if (!File.Exists(imgPath)) imgPath = Path.Combine(baseDir, "Imagens", agent.ImageFilename + ".jpg");
+        string imgPath = Path.Combine(baseDir, "shared/images", agent.ImageFilename + ".png");
+        if (!File.Exists(imgPath)) imgPath = Path.Combine(baseDir, "shared/images", agent.ImageFilename + ".jpg");
 
         if (File.Exists(imgPath))
         {
