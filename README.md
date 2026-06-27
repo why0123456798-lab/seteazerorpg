@@ -36,10 +36,8 @@ Every hero plays a crucial role on the board, directly impacting the rest and pr
 
 ## 🛠️ Technologies Used
 
-* **Python 3.x** - Core programming language.
-* **Tkinter** - Native Graphical User Interface (GUI) library.
-* **Pandas** - Data manipulation and loading of the agent database via CSV.
-* **Pillow (PIL)** - Processing, dynamic resizing, and rendering of hero images in JPG/PNG formats.
+* **C# and .NET10** - Core programming language.
+* **WindowsForm** - Native Graphical User Interface (GUI) library.
 
 ---
 
@@ -53,10 +51,6 @@ Every hero plays a crucial role on the board, directly impacting the rest and pr
 
 ## 🎮 How to Run the Game
 
-1. Make sure you have Python installed along with the required libraries:
-   ```bash
-   pip install pandas Pillow
+1. Make sure you have C# installed and .NET10 and the IDE(Preference Visual Studio)
 
-2. Run the following command in CMD
-3. ```bash
-   python Arquivo.py
+2. Just run the RPGBattleMaker.csproj
