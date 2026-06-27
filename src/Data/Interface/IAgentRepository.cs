@@ -6,5 +6,6 @@ namespace RPGBattleMaker.Data.Interface
 {
     public interface IAgentRepository
     {
+        Task GetAllHeroes(List<Agent> allAgents);
     }
 }

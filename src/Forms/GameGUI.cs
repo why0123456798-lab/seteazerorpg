@@ -1,13 +1,15 @@
 ﻿using CsvHelper;
+using Microsoft.Data.Sqlite;
+using RPGBattleMaker.Data;
+using RPGBattleMaker.Data.Interface;
 using System.Drawing.Drawing2D;
 using System.Globalization;
-using Microsoft.Data.Sqlite;
 using System.Reflection;
-using RPGBattleMaker.Data.Interface;
 
 public class GameGUI : Form
 {
     private readonly IDbContext _dbContext;
+    private readonly IAgentRepository _agentRepository;
 
     private string csvPath;
     private string baseDir;
@@ -43,8 +45,9 @@ public class GameGUI : Form
     private Button btnRoll;
     private PictureBox pbBattleHero;
 
-    public GameGUI(IDbContext dbContext)
+    public GameGUI(IDbContext dbContext, IAgentRepository agentRepository)
     {
+        _agentRepository = agentRepository;
         _dbContext = dbContext;
   
         this.Text = "RPG Autobattler Roguelike";
@@ -62,7 +65,11 @@ public class GameGUI : Form
             };
 
         baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        _dbContext.LoadDatabase(allAgents).Wait();
+
+        #region Populate Data from DB
+        _dbContext.InitializeDatabase().Wait();
+        _agentRepository.GetAllHeroes(allAgents).Wait();
+        #endregion
 
         mainPanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
         this.Controls.Add(mainPanel);
@@ -239,7 +246,7 @@ public class GameGUI : Form
     // ==========================================
     // TELA 2: LOJA / MERCADO
     // ==========================================
-    private void CreateShopScreen()
+    private async Task CreateShopScreen()
     {
         ClearScreen();
 

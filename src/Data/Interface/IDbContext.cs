@@ -6,6 +6,6 @@ namespace RPGBattleMaker.Data.Interface
 {
     public interface IDbContext
     {
-        Task LoadDatabase(List<Agent> allAgents);
+        Task InitializeDatabase();
     }
 }
