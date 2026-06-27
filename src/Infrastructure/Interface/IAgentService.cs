@@ -8,5 +8,7 @@ namespace RPGBattleMaker.Infrastructure.Interface
     {
         Task<Image> GetAgentImage(Agent agent, Size size);
         Task GetAllHeroes(List<Agent> allAgents);
+        Task<string> GetSynergyName(Agent agent);
+        Task<int> GetSynergyBonus(Agent currentAgent, List<Agent> teamAgents);
     }
 }

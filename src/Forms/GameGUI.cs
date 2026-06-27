@@ -278,7 +278,7 @@ public class GameGUI : Form
                 };
                 card.Controls.Add(statsLbl);
 
-                var synergyStr = agent.GetSynergyName(agent);
+                var synergyStr = await _agentService.GetSynergyName(agent);
 
                 Label synergyLbl = new Label
                 {
@@ -340,7 +340,7 @@ public class GameGUI : Form
             Label statsLbl = new Label { Text = $"{hpStr} | ⚔️ ATK:{agent.BaseAttack} 🛡️ DEF:{agent.BaseDefense} 🎯 PER:{agent.BaseSkill}", Font = new Font("Arial", 8.5f), ForeColor = Color.White, Location = new Point(55, 28), AutoSize = true };
             card.Controls.Add(statsLbl);
 
-            string synergyName = agent.GetSynergyName(agent);
+            string synergyName = await _agentService.GetSynergyName(agent);
             Label synergyLbl = new Label { Text = $"{synergyName}", Font = new Font("Arial", 8.5f), ForeColor = Color.Orange, Location = new Point(55, 43), AutoSize = true };
             card.Controls.Add(synergyLbl);
 
@@ -559,7 +559,7 @@ public class GameGUI : Form
 
         foreach (var a in aliveHeroes)
         {
-            int val = a.GetAttr(currentTheme, team) + a.GetSynergyBonus(aliveHeroes);
+            int val = a.GetAttr(currentTheme, team) + (await _agentService.GetSynergyBonus(a, aliveHeroes));
             if (currentTheme == Agent.Ataque) val += roundBonuses[Agent.Ataque];
             else if (currentTheme == Agent.Defesa) val += roundBonuses[Agent.Defesa];
 

@@ -42,15 +42,6 @@
             new SynergyGroup("Fé", "Thoryn", "Nix", "Orion", "Perdigas", "Arkmeros", "Yasmin")
         };
     }
-
-    // Função que descobre TODAS as sinergias que um determinado herói possui
-    public List<string> GetSynergiesForHero(string heroName)
-    {
-        return Groups
-            .Where(g => g.Heroes.Contains(heroName, StringComparer.OrdinalIgnoreCase))
-            .Select(g => g.Name)
-            .ToList();
-    }
 }
 
 public class Agent
@@ -76,12 +67,10 @@ public class Agent
     public const string Defesa = "Defesa";
     public const string Pericia = "Pericia";
 
-    public Agent(string name, string type, string desc, string player, int rarity, string synergyText, int ataque, int defesa, int vida, int pericia)
+    public Agent(string name, string type, int rarity, string synergyText, int ataque, int defesa, int vida, int pericia)
     {
         Name = name;
         Type = type;
-        Desc = desc;
-        Player = player;
         Rarity = rarity; // Sem int.Parse!
         SynergyText = synergyText.Trim();
 
@@ -117,82 +106,6 @@ public class Agent
 
         int val = baseVal - (Fatigue.ContainsKey(attrName) ? Fatigue[attrName] : 0);
         return val;
-    }
-
-    public int GetSynergyBonus(List<Agent> teamAgents)
-    {
-        int bonus = 0;
-
-        var synergyAgents = new SynergyAgents();
-
-        var namesInTeam = teamAgents.Select(a => a.Name).ToList();
-
-        foreach (var group in synergyAgents.Groups)
-        {
-            bool selfHasGroup = group.Heroes.Contains(this.Name, StringComparer.OrdinalIgnoreCase);
-
-            if (selfHasGroup)
-            {
-                int count = group.Heroes.Count(heroName =>
-                    namesInTeam.Contains(heroName));
-
-                if (group.Name == "Solo")
-                {
-                    if (teamAgents.Count == 1)
-                    {
-                        bonus += 4;
-                    }
-                }
-                else if (group.Name == "Líder" ||
-                    group.Name == "Trindade" ||
-                    group.Name == "Ordem" ||
-                    group.Name == "Nova Ordem" ||
-                    group.Name == "Vendedores" ||
-                    group.Name == "Hara-Kiri" ||
-                    group.Name == "A chama" ||
-                    group.Name == "Uagamora" ||
-                    group.Name == "Ninho do Dragão" ||
-                    group.Name == "Dragão" ||
-                    group.Name == "Caos" ||
-                    group.Name == "Fé")
-                {
-                    if (count >= 2)
-                    {
-                        bonus += 1 + (count - 2);
-                    }
-                }
-                else if (group.Name == "Irmãos" ||
-                    group.Name == "Irmãs")
-                {
-                    bonus += 3;
-                }
-                else if (group.Name == "Amor" ||
-                    group.Name == "Amor Platônico" ||
-                    group.Name == "Casal Real" ||
-                    group.Name == "Vilão")
-                {
-                    bonus += 2;
-                }
-            }
-        }
-
-        return bonus;
-    }
-
-    public string GetSynergyName(Agent agent)
-    {
-        var synergyAgents = new SynergyAgents();
-
-        List<string> heroSynergies = synergyAgents.GetSynergiesForHero(agent.Name);
-
-        if (heroSynergies.Count > 0)
-        {
-            return "Sinergia: " + string.Join(", ", heroSynergies);
-        }
-        else
-        {
-            return "";
-        }
     }
 }
 
