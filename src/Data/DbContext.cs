@@ -87,7 +87,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Crane");
                         insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
                         insertCmd.Parameters.AddWithValue("$raridade", 5);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Solo");
                         insertCmd.Parameters.AddWithValue("$ataque", 17);
                         insertCmd.Parameters.AddWithValue("$defesa", 2);
                         insertCmd.Parameters.AddWithValue("$vida", 7);
@@ -99,7 +99,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Lilith");
                         insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
                         insertCmd.Parameters.AddWithValue("$raridade", 5);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Vilão,Solo");
                         insertCmd.Parameters.AddWithValue("$ataque", 4);
                         insertCmd.Parameters.AddWithValue("$defesa", 4);
                         insertCmd.Parameters.AddWithValue("$vida", 7);
@@ -111,7 +111,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Agni");
                         insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
                         insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "A chama");
                         insertCmd.Parameters.AddWithValue("$ataque", 2);
                         insertCmd.Parameters.AddWithValue("$defesa", 2);
                         insertCmd.Parameters.AddWithValue("$vida", 6);
@@ -123,7 +123,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Akane");
                         insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
                         insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Irmãs,Nova Ordem");
                         insertCmd.Parameters.AddWithValue("$ataque", 13);
                         insertCmd.Parameters.AddWithValue("$defesa", 2);
                         insertCmd.Parameters.AddWithValue("$vida", 5);
@@ -135,7 +135,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Tom");
                         insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
                         insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Nova Ordem");
                         insertCmd.Parameters.AddWithValue("$ataque", 13);
                         insertCmd.Parameters.AddWithValue("$defesa", 2);
                         insertCmd.Parameters.AddWithValue("$vida", 5);
@@ -147,7 +147,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Aziza");
                         insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
                         insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "A chama");
                         insertCmd.Parameters.AddWithValue("$ataque", 13);
                         insertCmd.Parameters.AddWithValue("$defesa", 2);
                         insertCmd.Parameters.AddWithValue("$vida", 5);
@@ -159,7 +159,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Shyva");
                         insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
                         insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Irmãos,Caos");
                         insertCmd.Parameters.AddWithValue("$ataque", 3);
                         insertCmd.Parameters.AddWithValue("$defesa", 3);
                         insertCmd.Parameters.AddWithValue("$vida", 5);
@@ -171,7 +171,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Aya");
                         insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
                         insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Trindade,Ninho do Dragão,Caos");
                         insertCmd.Parameters.AddWithValue("$ataque", 2);
                         insertCmd.Parameters.AddWithValue("$defesa", 3);
                         insertCmd.Parameters.AddWithValue("$vida", 7);
@@ -183,7 +183,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Caim");
                         insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
                         insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Vilão");
                         insertCmd.Parameters.AddWithValue("$ataque", 2);
                         insertCmd.Parameters.AddWithValue("$defesa", 13);
                         insertCmd.Parameters.AddWithValue("$vida", 6);
@@ -195,7 +195,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Viktor");
                         insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
                         insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora");
                         insertCmd.Parameters.AddWithValue("$ataque", 2);
                         insertCmd.Parameters.AddWithValue("$defesa", 13);
                         insertCmd.Parameters.AddWithValue("$vida", 6);
@@ -207,7 +207,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Gabriel");
                         insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
                         insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Nova Ordem");
                         insertCmd.Parameters.AddWithValue("$ataque", 2);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 6);
@@ -219,7 +219,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Thoryn");
                         insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
                         insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Trindade,Fé");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 12);
                         insertCmd.Parameters.AddWithValue("$vida", 5);
@@ -231,7 +231,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Nix");
                         insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
                         insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Fé");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 5);
@@ -243,7 +243,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Zendaya");
                         insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
                         insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Trindade");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 5);
@@ -255,7 +255,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Daerion");
                         insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
                         insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Casal Real,Amor platônico,Ninho do Dragão,Dragão");
                         insertCmd.Parameters.AddWithValue("$ataque", 3);
                         insertCmd.Parameters.AddWithValue("$defesa", 7);
                         insertCmd.Parameters.AddWithValue("$vida", 6);
@@ -267,7 +267,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Shyvana");
                         insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
                         insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora,Dragão");
                         insertCmd.Parameters.AddWithValue("$ataque", 11);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 5);
@@ -279,7 +279,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Symon");
                         insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
                         insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 5);
@@ -291,7 +291,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Kael");
                         insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
                         insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora");
                         insertCmd.Parameters.AddWithValue("$ataque", 11);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 5);
@@ -303,7 +303,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Arkmeros");
                         insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
                         insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Fé");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 5);
@@ -315,7 +315,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Ruivo");
                         insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
                         insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Vendedores");
                         insertCmd.Parameters.AddWithValue("$ataque", 2);
                         insertCmd.Parameters.AddWithValue("$defesa", 0);
                         insertCmd.Parameters.AddWithValue("$vida", 5);
@@ -327,7 +327,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Marionetista");
                         insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
                         insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Vilão");
                         insertCmd.Parameters.AddWithValue("$ataque", 2);
                         insertCmd.Parameters.AddWithValue("$defesa", 0);
                         insertCmd.Parameters.AddWithValue("$vida", 5);
@@ -339,7 +339,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Seph Flores");
                         insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
                         insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri");
                         insertCmd.Parameters.AddWithValue("$ataque", 2);
                         insertCmd.Parameters.AddWithValue("$defesa", 0);
                         insertCmd.Parameters.AddWithValue("$vida", 5);
@@ -351,7 +351,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Barbara");
                         insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
                         insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Trindade");
                         insertCmd.Parameters.AddWithValue("$ataque", 11);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 5);
@@ -363,7 +363,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Saphyra");
                         insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
                         insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Amor");
                         insertCmd.Parameters.AddWithValue("$ataque", 9);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 3);
@@ -375,7 +375,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Oriven");
                         insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
                         insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora");
                         insertCmd.Parameters.AddWithValue("$ataque", 2);
                         insertCmd.Parameters.AddWithValue("$defesa", 0);
                         insertCmd.Parameters.AddWithValue("$vida", 4);
@@ -387,7 +387,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Megan");
                         insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
                         insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri");
                         insertCmd.Parameters.AddWithValue("$ataque", 2);
                         insertCmd.Parameters.AddWithValue("$defesa", 0);
                         insertCmd.Parameters.AddWithValue("$vida", 4);
@@ -399,7 +399,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Cael");
                         insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
                         insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Ninho do Dragão");
                         insertCmd.Parameters.AddWithValue("$ataque", 8);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 4);
@@ -411,7 +411,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Sirius");
                         insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
                         insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Caos");
                         insertCmd.Parameters.AddWithValue("$ataque", 2);
                         insertCmd.Parameters.AddWithValue("$defesa", 0);
                         insertCmd.Parameters.AddWithValue("$vida", 4);
@@ -423,7 +423,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Marcos");
                         insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
                         insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 8);
                         insertCmd.Parameters.AddWithValue("$vida", 4);
@@ -435,7 +435,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Shantal");
                         insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
                         insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "A chama,Amor");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 4);
@@ -447,7 +447,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Lamblin");
                         insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
                         insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Solo");
                         insertCmd.Parameters.AddWithValue("$ataque", 9);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 3);
@@ -459,7 +459,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Aryte");
                         insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
                         insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 8);
                         insertCmd.Parameters.AddWithValue("$vida", 4);
@@ -471,7 +471,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Zahra");
                         insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
                         insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Vendedores");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 8);
                         insertCmd.Parameters.AddWithValue("$vida", 4);
@@ -483,7 +483,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Samir");
                         insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
                         insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Irmãos,Caos");
                         insertCmd.Parameters.AddWithValue("$ataque", 6);
                         insertCmd.Parameters.AddWithValue("$defesa", 2);
                         insertCmd.Parameters.AddWithValue("$vida", 3);
@@ -495,7 +495,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Nyu");
                         insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
                         insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri");
                         insertCmd.Parameters.AddWithValue("$ataque", 2);
                         insertCmd.Parameters.AddWithValue("$defesa", 0);
                         insertCmd.Parameters.AddWithValue("$vida", 4);
@@ -507,7 +507,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Padre");
                         insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
                         insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Caos,Fé");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 0);
                         insertCmd.Parameters.AddWithValue("$vida", 4);
@@ -519,7 +519,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Orion");
                         insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
                         insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Fé");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 3);
@@ -531,7 +531,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Kru'el");
                         insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
                         insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 0);
                         insertCmd.Parameters.AddWithValue("$vida", 3);
@@ -543,7 +543,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Meilyn");
                         insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
                         insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Amor platônico,Ninho do Dragão");
                         insertCmd.Parameters.AddWithValue("$ataque", 6);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 3);
@@ -555,7 +555,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Mauga");
                         insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
                         insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 6);
                         insertCmd.Parameters.AddWithValue("$vida", 3);
@@ -567,7 +567,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Marcus");
                         insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
                         insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Líder,Nova Ordem");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 6);
                         insertCmd.Parameters.AddWithValue("$vida", 3);
@@ -579,7 +579,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Leão");
                         insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
                         insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Líder,Ordem");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 0);
                         insertCmd.Parameters.AddWithValue("$vida", 3);
@@ -591,7 +591,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Matheus");
                         insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
                         insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Nova Ordem");
                         insertCmd.Parameters.AddWithValue("$ataque", 6);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 3);
@@ -603,7 +603,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Cronista");
                         insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
                         insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 0);
                         insertCmd.Parameters.AddWithValue("$vida", 3);
@@ -615,7 +615,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Vysenia");
                         insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
                         insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Casal Real,Líder,Ninho do Dragão,Dragão");
                         insertCmd.Parameters.AddWithValue("$ataque", 4);
                         insertCmd.Parameters.AddWithValue("$defesa", 2);
                         insertCmd.Parameters.AddWithValue("$vida", 2);
@@ -627,7 +627,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Bree");
                         insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
                         insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Vendedores");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 0);
                         insertCmd.Parameters.AddWithValue("$vida", 3);
@@ -639,7 +639,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Mimoso");
                         insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
                         insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Vendedores");
                         insertCmd.Parameters.AddWithValue("$ataque", 6);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 3);
@@ -651,7 +651,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Don Omar");
                         insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
                         insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Vendedores");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 0);
                         insertCmd.Parameters.AddWithValue("$vida", 3);
@@ -663,7 +663,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Yasmin");
                         insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
                         insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Vendedores,Fé");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 3);
@@ -675,7 +675,7 @@ namespace RPGBattleMaker.Data
                         insertCmd.Parameters.AddWithValue("$agente", "Kyra");
                         insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
                         insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo");
+                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora");
                         insertCmd.Parameters.AddWithValue("$ataque", 1);
                         insertCmd.Parameters.AddWithValue("$defesa", 1);
                         insertCmd.Parameters.AddWithValue("$vida", 3);
