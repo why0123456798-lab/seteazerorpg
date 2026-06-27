@@ -106,7 +106,7 @@ public class GameGUI : Form
     {
         foreach (var a in allAgents) a.ResetStatus();
         team.Clear();
-        gold = 10000;
+        gold = 10;
         currentLevel = 1;
         mode = "Difícil";
         rerollCount = 1;

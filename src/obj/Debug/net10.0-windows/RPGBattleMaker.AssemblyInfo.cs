@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RPGBattleMaker")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d563e1667a8e62172ba8401368848b8a5ecb562d")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+daf948fb52b84a326383a12cb6601f3e9e3741ca")]
 [assembly: System.Reflection.AssemblyProductAttribute("RPGBattleMaker")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RPGBattleMaker")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
