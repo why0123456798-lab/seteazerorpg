@@ -43,6 +43,7 @@ public class GameGUI : Form
     // Controles específicos de telas para atualização
     private RichTextBox logTxt;
     private Button btnRoll;
+    private Label lblHeroStats;
     private PictureBox pbBattleHero;
 
     public GameGUI(IDbContext dbContext, IAgentRepository agentRepository)
@@ -543,6 +544,9 @@ public class GameGUI : Form
         Panel battleFrame = new Panel { Dock = DockStyle.Fill, BackColor = ColorTranslator.FromHtml("#121212"), Padding = new Padding(20) };
         mainPanel.Controls.Add(battleFrame);
 
+        // --- CONTROLES COM DOCK TOP (A ordem de adição importa!) ---
+
+        // 1º O Título Principal da Missão
         Label lblMTitle = new Label
         {
             Text = $"🚨 MISSÃO NÍVEL {currentLevel} | TEMA: {currentTheme.ToUpper()} 🚨",
@@ -550,42 +554,60 @@ public class GameGUI : Form
             ForeColor = ColorTranslator.FromHtml("#ff9800"),
             TextAlign = ContentAlignment.MiddleCenter,
             Dock = DockStyle.Top,
-            Height = 30
+            Height = 35
         };
         battleFrame.Controls.Add(lblMTitle);
 
+        // 2º Informações de Dificuldade (DC)
         Label lblDcInfo = new Label
         {
             Text = $"Dificuldade Alvo (DC): {dc}  (DC Base: {baseDc})",
             Font = new Font("Arial", 11),
-            ForeColor = Color.White,
+            ForeColor = Color.LightGray,
             TextAlign = ContentAlignment.MiddleCenter,
             Dock = DockStyle.Top,
             Height = 25
         };
         battleFrame.Controls.Add(lblDcInfo);
 
+        // 3º Status do Herói Atual (Agora bem posicionado logo abaixo da DC)
+        lblHeroStats = new Label
+        {
+            Text = $"{currentTheme}: ? | Fadiga: ?",
+            Font = new Font("Arial", 11, FontStyle.Italic),
+            ForeColor = ColorTranslator.FromHtml("#4caf50"), // Um verde para dar destaque aos atributos
+            TextAlign = ContentAlignment.MiddleCenter,
+            Dock = DockStyle.Top,
+            Height = 25
+        };
+        battleFrame.Controls.Add(lblHeroStats);
+
+        // --- CONTROLES COM POSICIONAMENTO FIXO / ANCHOR ---
+
+        // Imagem do Herói - Empurrada um pouco mais para baixo (Top = 120) para dar espaço às labels acima
         pbBattleHero = new PictureBox
         {
             Size = new Size(80, 80),
             SizeMode = PictureBoxSizeMode.CenterImage,
-            Location = new Point((this.Width - 80) / 2, 80),
+            Location = new Point((this.Width - 80) / 2, 120),
             Anchor = AnchorStyles.Top
         };
         battleFrame.Controls.Add(pbBattleHero);
 
+        // Log de Batalha - Ajustado o Top para 210 para não colidir com o PictureBox
         logTxt = new RichTextBox
         {
             BackColor = ColorTranslator.FromHtml("#1e1e1e"),
             Font = new Font("Consolas", 10),
             ReadOnly = true,
-            Location = new Point(20, 180),
+            Location = new Point(20, 210),
             Width = this.Width - 60,
-            Height = 240,
+            Height = 210,
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
         };
         battleFrame.Controls.Add(logTxt);
 
+        // Botão de Rolar Dados
         btnRoll = new Button
         {
             Text = "🎲 ROLAR DADO (TESTE 1/5)",
@@ -639,6 +661,9 @@ public class GameGUI : Form
             }
         }
 
+        var setValueExibition = currentTheme == Agent.Ataque ? bestHero.BaseAttack : currentTheme == Agent.Defesa ? bestHero.BaseDefense : bestHero.BaseSkill;
+
+        lblHeroStats.Text = $"{currentTheme}: {setValueExibition} Fadiga: {bestHero.Fatigue.FirstOrDefault(f => f.Key == currentTheme).Value}";
         btnRoll.Text = $"🎲 ROLAR PARA {bestHero.Name.ToUpper()} (Total: {bestVal}) [Teste {testeNum}/5]";
         pbBattleHero.Image = GetAgentImage(bestHero, new Size(80, 80));
     }
