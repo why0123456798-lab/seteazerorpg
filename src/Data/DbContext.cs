@@ -385,7 +385,7 @@ namespace RPGBattleMaker.Data
                         // Herói 29: Megan
                         insertCmd.Parameters.Clear();
                         insertCmd.Parameters.AddWithValue("$agente", "Megan");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
+                        insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
                         insertCmd.Parameters.AddWithValue("$raridade", 2);
                         insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri");
                         insertCmd.Parameters.AddWithValue("$ataque", 2);
