@@ -96,22 +96,22 @@ public class Agent
     public const string Defesa = "Defesa";
     public const string Pericia = "Pericia";
 
-    public Agent(dynamic row)
+    public Agent(string name, string type, string desc, string player, int rarity, string synergyText, int ataque, int defesa, int vida, int pericia)
     {
-        Name = row.Agente;
-        Type = row.Tipo;
-        Desc = row.Descrição;
-        Player = row.Player;
-        Rarity = int.Parse(row.Raridade);
-        SynergyText = ((string)row.Sinergia).Trim();
+        Name = name;
+        Type = type;
+        Desc = desc;
+        Player = player;
+        Rarity = rarity; // Sem int.Parse!
+        SynergyText = synergyText.Trim();
 
-        BaseAttack = int.Parse(row.Ataque);
-        BaseDefense = int.Parse(row.Defesa);
-        MaxLife = int.Parse(row.Vida);
-        BaseSkill = int.Parse(row.Perícia);
+        BaseAttack = ataque;   // Sem int.Parse!
+        BaseDefense = defesa; // Sem int.Parse!
+        MaxLife = vida;       // Sem int.Parse!
+        BaseSkill = pericia;   // Sem int.Parse!
 
         CurrentLife = MaxLife;
-        Fatigue = new Dictionary<string, int> { { Ataque, 0 }, { Defesa, 0 }, { Pericia, 0 } };
+        Fatigue = new Dictionary<string, int> { { "Ataque", 0 }, { "Defesa", 0 }, { "Perícia", 0 } };
         ImageFilename = Name.ToLower();
     }
 

@@ -1,10 +1,14 @@
 ﻿using CsvHelper;
 using System.Drawing.Drawing2D;
 using System.Globalization;
+using Microsoft.Data.Sqlite;
 using System.Reflection;
+using RPGBattleMaker.Data.Interface;
 
 public class GameGUI : Form
 {
+    private readonly IDbContext _dbContext;
+
     private string csvPath;
     private string baseDir;
     private List<Agent> allAgents = new List<Agent>();
@@ -39,8 +43,10 @@ public class GameGUI : Form
     private Button btnRoll;
     private PictureBox pbBattleHero;
 
-    public GameGUI()
+    public GameGUI(IDbContext dbContext)
     {
+        _dbContext = dbContext;
+  
         this.Text = "RPG Autobattler Roguelike";
         this.Size = new Size(970, 740);
         this.StartPosition = FormStartPosition.CenterScreen;
@@ -56,38 +62,13 @@ public class GameGUI : Form
             };
 
         baseDir = AppDomain.CurrentDomain.BaseDirectory;
-        LoadDatabase();
+        _dbContext.LoadDatabase(allAgents).Wait();
 
         mainPanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
         this.Controls.Add(mainPanel);
 
         ResetGameState();
         CreateModeSelectionScreen();
-    }
-
-    private void LoadDatabase()
-    {
-        try
-        {
-            var assembly = Assembly.GetExecutingAssembly();
-            using (Stream stream = assembly.GetManifestResourceStream("RPGBattleMaker.Data.plano.csv"))
-            using (StreamReader reader = new StreamReader(stream))
-            {
-                using (var csv = new CsvReader(reader, CultureInfo.InvariantCulture))
-                {
-                    var records = csv.GetRecords<dynamic>().ToList();
-                    foreach (var row in records)
-                    {
-                        allAgents.Add(new Agent(row));
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Erro ao ler o CSV: {ex.Message}", "Erro", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            Environment.Exit(0);
-        }
     }
 
     private string MappingTypes(string agentType)
@@ -774,7 +755,7 @@ public class GameGUI : Form
 
         var aliveHeroes = team.Any(a => a.CurrentLife > 0);
 
-        if (!aliveHeroes)
+        if (!aliveHeroes || falhas >= 3)
         {
             string msgText = !aliveHeroes ? "🔴 GAME OVER!\nSua equipe inteira está morta!" : "🔴 GAME OVER!\nSua equipe acumulou 3 ou mais falhas e não conseguiu completar o andar.";
             Label lblRes = new Label { Text = msgText, Font = new Font("Arial", 12, FontStyle.Bold), ForeColor = ColorTranslator.FromHtml("#f44336"), Size = new Size(500, 60), TextAlign = ContentAlignment.MiddleCenter, Top = 100 };

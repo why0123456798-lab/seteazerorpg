@@ -1,24 +1,38 @@
-namespace WinFormsApp1
+using System;
+using System.Windows.Forms;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using RPGBattleMaker.Data;
+using RPGBattleMaker.Data.Interface;
+
+namespace RPGBattleMaker
 {
     internal static class Program
     {
-        /// <summary>
-        ///  The main entry point for the application.
-        /// </summary>
+        // O Host que guardará os serviços injetados
+        public static IHost? ServiceHost { get; private set; }
+
         [STAThread]
         static void Main()
         {
-            try
-            {
-                // To customize application configuration such as set high DPI settings or default font,
-                // see https://aka.ms/applicationconfiguration.
-                ApplicationConfiguration.Initialize();
-                Application.Run(new GameGUI());
-            }
-            catch (Exception ex)
-            {
-                throw new Exception(ex.Message);
-            }
+            SQLitePCL.Batteries.Init();
+            ApplicationConfiguration.Initialize();
+
+            ServiceHost = Host.CreateDefaultBuilder()
+                .ConfigureServices((context, services) =>
+                {
+                    services.AddSingleton<IAgentRepository, AgentRepository>();
+                    services.AddSingleton<IDbContext, DbContext>();
+
+                    services.AddTransient<GameGUI>();
+                })
+                .Build();
+
+            ServiceHost.Start();
+
+            var mainForm = ServiceHost.Services.GetRequiredService<GameGUI>();
+
+            Application.Run(mainForm);
         }
     }
 }
