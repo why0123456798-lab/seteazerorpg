@@ -26,9 +26,13 @@ namespace RPGBattleMaker
                     services.AddSingleton<IDbContext, DbContext>();
 
                     services.AddSingleton<IAgentRepository, AgentRepository>();
+                    services.AddSingleton<IItemRepository, ItemRepository>();
+                    services.AddSingleton<IEventRepository, EventRepository>();
 
                     services.AddSingleton<IAgentService, AgentService>();
                     services.AddSingleton<IGameService, GameService>();
+                    services.AddSingleton<IItemService, ItemService>();
+                    services.AddSingleton<IEventService, EventService>();
 
                     services.AddTransient<GameGUI>();
                 })

@@ -4,6 +4,7 @@ using RPGBattleMaker.Data;
 using RPGBattleMaker.Data.Interface;
 using RPGBattleMaker.Infrastructure;
 using RPGBattleMaker.Infrastructure.Interface;
+using RPGBattleMaker.Models;
 using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Reflection;
@@ -14,6 +15,10 @@ public class GameGUI : Form
     private readonly IDbContext _dbContext;
     private readonly IAgentService _agentService;
     private readonly IGameService _gameService;
+    private readonly IEventService _eventService;
+
+    private List<Item> itemShop = new List<Item>();
+    private List<Item> purchasedItems = new List<Item>();
 
     private List<Agent> allAgents = new List<Agent>();
     private Random random = new Random();
@@ -30,6 +35,7 @@ public class GameGUI : Form
     // Estado da Batalha/Missão
     private string currentTheme;
     private int dc;
+    private int extraDc = 0;
     private Dictionary<string, int> shields = new Dictionary<string, int>();
     private int sucessos;
     private int falhas;
@@ -49,12 +55,12 @@ public class GameGUI : Form
     #endregion
 
     #region Constructor
-    public GameGUI(IDbContext dbContext, IAgentService agentService, IGameService gameService)
+    public GameGUI(IDbContext dbContext, IAgentService agentService, IGameService gameService, IEventService eventService)
     {
         _agentService = agentService;
         _gameService = gameService;
         _dbContext = dbContext;
-  
+
         this.Text = "RPG Autobattler Roguelike";
         this.Size = new Size(970, 740);
         this.StartPosition = FormStartPosition.CenterScreen;
@@ -74,6 +80,7 @@ public class GameGUI : Form
 
         ResetGameState();
         CreateModeSelectionScreen();
+        _eventService = eventService;
     }
     #endregion
 
@@ -91,6 +98,9 @@ public class GameGUI : Form
         #region Populate Data from DB
         _dbContext.InitializeDatabase().Wait();
         _agentService.GetAllHeroes(allAgents).Wait();
+
+        itemShop.Clear();
+        purchasedItems.Clear();
         #endregion
     }
 
@@ -153,6 +163,7 @@ public class GameGUI : Form
     {
         mode = chosenMode;
         market = _gameService.RollMarket(team, allAgents, currentLevel);
+        itemShop = RollItemShop(currentLevel);
         await CreateShopScreen();
     }
     #endregion
@@ -205,15 +216,133 @@ public class GameGUI : Form
         topFrame.Controls.Add(btnReroll);
 
         // Conteineres do Mercado e Time
-        TableLayoutPanel mainLayout = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 1, ColumnCount = 2, Top = 60 };
-        mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55f));
-        mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45f));
+        TableLayoutPanel mainLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            RowCount = 1,
+            ColumnCount = 3,
+            Top = 60
+        };
+        mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45f)); // Mercado Heróis
+        mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f)); // Loja de Itens  ← NOVO
+        mainLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30f)); // Time
         mainPanel.Controls.Add(mainLayout);
         mainLayout.BringToFront();
 
         // Lado Esquerdo: Mercado
         GroupBox marketFrame = new GroupBox { Text = " Mercado (4 slots) ", Font = new Font("Arial", 11, FontStyle.Bold), ForeColor = Color.White, Dock = DockStyle.Fill };
         mainLayout.Controls.Add(marketFrame, 0, 0);
+
+        GroupBox itemFrame = new GroupBox
+        {
+            Text = " 🧪 Loja de Itens ",
+            Font = new Font("Arial", 11, FontStyle.Bold),
+            ForeColor = ColorTranslator.FromHtml("#ff9800"),
+            Dock = DockStyle.Fill
+        };
+        mainLayout.Controls.Add(itemFrame, 1, 0);
+
+        FlowLayoutPanel itemList = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.TopDown,
+            AutoScroll = true,
+            Padding = new Padding(8)
+        };
+        itemFrame.Controls.Add(itemList);
+
+        // Cards de itens
+        for (int i = 0; i < itemShop.Count; i++)
+        {
+            int itemIdx = i;
+            Item shopItem = itemShop[i];
+
+            Panel itemCard = new Panel
+            {
+                Size = new Size(190, 100),
+                BackColor = ColorTranslator.FromHtml("#2a2a2a"),
+                Margin = new Padding(0, 5, 0, 5)
+            };
+            itemList.Controls.Add(itemCard);
+
+            if (shopItem == null)
+            {
+                Label soldLbl = new Label
+                {
+                    Text = "✅ COMPRADO",
+                    Font = new Font("Arial", 10, FontStyle.Italic),
+                    ForeColor = Color.Gray,
+                    Dock = DockStyle.Fill,
+                    TextAlign = ContentAlignment.MiddleCenter
+                };
+                itemCard.Controls.Add(soldLbl);
+            }
+            else
+            {
+                Color rarityColor = rarityColors.ContainsKey(shopItem.Rarity) ? rarityColors[shopItem.Rarity] : Color.White;
+
+                Label nameLbl = new Label
+                {
+                    Text = $"{shopItem.Emoji} {shopItem.Name}",
+                    Font = new Font("Arial", 9, FontStyle.Bold),
+                    ForeColor = rarityColor,
+                    Location = new Point(5, 5),
+                    Size = new Size(180, 20)
+                };
+                itemCard.Controls.Add(nameLbl);
+
+                Label descLbl = new Label
+                {
+                    Text = shopItem.Description,
+                    Font = new Font("Arial", 8),
+                    ForeColor = ColorTranslator.FromHtml("#cccccc"),
+                    Location = new Point(5, 25),
+                    Size = new Size(180, 35),
+                    AutoEllipsis = true
+                };
+                itemCard.Controls.Add(descLbl);
+
+                Button btnBuyItem = new Button
+                {
+                    Text = $"🪙 {shopItem.Cost}g  Comprar",
+                    BackColor = ColorTranslator.FromHtml("#795548"),
+                    ForeColor = Color.White,
+                    Font = new Font("Arial", 8, FontStyle.Bold),
+                    Dock = DockStyle.Bottom,
+                    Height = 28,
+                    FlatStyle = FlatStyle.Flat
+                };
+                btnBuyItem.Click += (s, e) => BuyItem(itemIdx).Wait();
+                itemCard.Controls.Add(btnBuyItem);
+            }
+        }
+
+        // Exibe itens já comprados nesta run
+        if (purchasedItems.Count > 0)
+        {
+            Label ownedTitle = new Label
+            {
+                Text = "── Itens Ativos ──",
+                Font = new Font("Arial", 8, FontStyle.Italic),
+                ForeColor = Color.Gray,
+                AutoSize = true,
+                Margin = new Padding(0, 8, 0, 2)
+            };
+            itemList.Controls.Add(ownedTitle);
+
+            foreach (var owned in purchasedItems)
+            {
+                Label ownedLbl = new Label
+                {
+                    Text = $"{owned.Emoji} {owned.Name}",
+                    Font = new Font("Arial", 8),
+                    ForeColor = ColorTranslator.FromHtml("#4caf50"),
+                    AutoSize = true,
+                    Margin = new Padding(2, 1, 0, 1)
+                };
+                itemList.Controls.Add(ownedLbl);
+            }
+        }
 
         TableLayoutPanel marketGrid = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 2, Padding = new Padding(10) };
         marketGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
@@ -246,7 +375,7 @@ public class GameGUI : Form
                     ForeColor = rarityColor,
                     TextAlign = ContentAlignment.TopCenter,
                     Dock = DockStyle.Top,
-                    Height = 35 
+                    Height = 35
                 };
                 card.Controls.Add(titleLbl);
 
@@ -282,9 +411,9 @@ public class GameGUI : Form
 
                 Label synergyLbl = new Label
                 {
-                    Text = synergyStr, 
-                    Font = new Font("Arial", 9, FontStyle.Italic), 
-                    ForeColor = ColorTranslator.FromHtml("#ff9800"), 
+                    Text = synergyStr,
+                    Font = new Font("Arial", 9, FontStyle.Italic),
+                    ForeColor = ColorTranslator.FromHtml("#ff9800"),
                     TextAlign = ContentAlignment.MiddleCenter,
                     Location = new Point(0, 195),
                     Width = card.Width,
@@ -310,7 +439,7 @@ public class GameGUI : Form
 
         // Lado Direito: Sua Equipe
         GroupBox teamFrame = new GroupBox { Text = " Sua Equipe (Mín 1 / Máx 5) ", Font = new Font("Arial", 11, FontStyle.Bold), ForeColor = Color.White, Dock = DockStyle.Fill };
-        mainLayout.Controls.Add(teamFrame, 1, 0);
+        mainLayout.Controls.Add(teamFrame, 2, 0);
 
         FlowLayoutPanel teamList = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, AutoScroll = true, Padding = new Padding(10) };
         teamFrame.Controls.Add(teamList);
@@ -442,7 +571,7 @@ public class GameGUI : Form
             new Dictionary<int, int> { { 1, 13 }, { 2, 16 }, { 3, 19 }, { 4, 23 }, { 5, 27 } } :
             new Dictionary<int, int> { { 1, 10 }, { 2, 13 }, { 3, 16 }, { 4, 20 }, { 5, 25 } };
 
-        int baseDc = dcTable[currentLevel];
+        int baseDc = dcTable[currentLevel] + extraDc;
         dc = Math.Max(1, baseDc - roundBonuses["DC_Reduction"]);
 
         shields = team.ToDictionary(a => a.Name, a => roundBonuses["Escudo"]);
@@ -713,6 +842,7 @@ public class GameGUI : Form
             else { txt = "🟢 VITÓRIA ABSOLUTA! Perfeito e lendário!"; g = 8; }
 
             gold += g;
+            extraDc = 0;
 
             Label lblRes = new Label { Text = $"{txt}\nRecompensa da Fase: +{g}g", Font = new Font("Arial", 12, FontStyle.Bold), ForeColor = ColorTranslator.FromHtml("#4caf50"), Size = new Size(500, 60), TextAlign = ContentAlignment.MiddleCenter, Top = 100 };
             frame.Controls.Add(lblRes);
@@ -724,8 +854,309 @@ public class GameGUI : Form
     }
     #endregion
 
+    #region Tela 4.5 Events
+    private async Task NextEventPhase(Event gameEvent)
+    {
+        ClearScreen();
+
+        // Painel de fundo centralizado
+        Panel frame = new Panel
+        {
+            Size = new Size(600, 480),
+            BackColor = ColorTranslator.FromHtml("#1a1a2e"),
+        };
+        frame.Location = new Point(
+            (mainPanel.Width - frame.Width) / 2,
+            (mainPanel.Height - frame.Height) / 2
+        );
+        frame.Anchor = AnchorStyles.None;
+        mainPanel.Controls.Add(frame);
+
+        // Borda decorativa (painel interno levemente diferente)
+        Panel innerBorder = new Panel
+        {
+            Size = new Size(594, 474),
+            Location = new Point(3, 3),
+            BackColor = ColorTranslator.FromHtml("#16213e"),
+        };
+        frame.Controls.Add(innerBorder);
+
+        // ── Cabeçalho ──────────────────────────────────────────────
+        Label lblBadge = new Label
+        {
+            Text = "⚡ EVENTO ALEATÓRIO",
+            Font = new Font("Arial", 10, FontStyle.Bold),
+            ForeColor = ColorTranslator.FromHtml("#ff9800"),
+            Size = new Size(580, 24),
+            TextAlign = ContentAlignment.MiddleCenter,
+            Location = new Point(7, 10)
+        };
+        innerBorder.Controls.Add(lblBadge);
+
+        Label lblTitle = new Label
+        {
+            Text = gameEvent.Name,
+            Font = new Font("Arial", 17, FontStyle.Bold),
+            ForeColor = Color.White,
+            Size = new Size(560, 40),
+            TextAlign = ContentAlignment.MiddleCenter,
+            Location = new Point(7, 38)
+        };
+        innerBorder.Controls.Add(lblTitle);
+
+        // Separador visual
+        Panel separator = new Panel
+        {
+            Size = new Size(540, 2),
+            Location = new Point(27, 82),
+            BackColor = ColorTranslator.FromHtml("#ff9800")
+        };
+        innerBorder.Controls.Add(separator);
+
+        // Descrição / narrativa do evento
+        Label lblDesc = new Label
+        {
+            Text = gameEvent.Description,
+            Font = new Font("Arial", 10),
+            ForeColor = ColorTranslator.FromHtml("#cccccc"),
+            Size = new Size(540, 80),
+            TextAlign = ContentAlignment.MiddleCenter,
+            Location = new Point(27, 92)
+        };
+        innerBorder.Controls.Add(lblDesc);
+
+        // ── 3 Botões de Opção ──────────────────────────────────────
+        var optionColors = new[]
+        {
+        ColorTranslator.FromHtml("#c62828"), // Opção A — vermelho / ousada
+        ColorTranslator.FromHtml("#1565c0"), // Opção B — azul   / equilibrada
+        ColorTranslator.FromHtml("#2e7d32"), // Opção C — verde  / segura
+    };
+
+        var optionTexts = new[] { gameEvent.OptionA, gameEvent.OptionB, gameEvent.OptionC };
+
+        for (int i = 0; i < 3; i++)
+        {
+            int chosenIndex = i;
+
+            string optionText = optionTexts[i] ?? $"Opção {i + 1}";
+
+            Button btnOption = new Button
+            {
+                Text = $"{i + 1}. {optionText}",
+                Font = new Font("Arial", 10, FontStyle.Bold),
+                BackColor = optionColors[i],
+                ForeColor = Color.White,
+                Size = new Size(520, 52),
+                Location = new Point(37, 190 + i * 66),
+                FlatStyle = FlatStyle.Flat,
+                TextAlign = ContentAlignment.MiddleLeft,
+                Padding = new Padding(8, 0, 0, 0)
+            };
+            btnOption.FlatAppearance.BorderSize = 0;
+
+            btnOption.Click += async (s, e) =>
+            {
+                // Desativa todos os botões para evitar duplo clique
+                foreach (Control ctrl in innerBorder.Controls)
+                    if (ctrl is Button b) b.Enabled = false;
+
+                // Chama o serviço com a opção escolhida pelo jogador
+                var result = _eventService.GetEventResult(gameEvent, chosenIndex, team);
+
+                // Exibe o resultado na mesma tela
+                await ShowEventResult(innerBorder, result);
+            };
+
+            innerBorder.Controls.Add(btnOption);
+        }
+    }
+
+    /// <summary>
+    /// Mostra o resultado da opção escolhida sobre a tela do evento,
+    /// substituindo os botões por um painel de resultado + botão de continuar.
+    /// </summary>
+    private async Task ShowEventResult(Panel innerBorder, EventResult result)
+    {
+        // Remove os 3 botões de opção (mantém título, badge, separador e descrição)
+        var buttonsToRemove = innerBorder.Controls
+            .OfType<Button>()
+            .ToList();
+        foreach (var btn in buttonsToRemove)
+            innerBorder.Controls.Remove(btn);
+
+        // Painel de resultado
+        Panel resultPanel = new Panel
+        {
+            Size = new Size(520, 160),
+            Location = new Point(37, 190),
+            BackColor = ColorTranslator.FromHtml("#0d1117"),
+            Padding = new Padding(12)
+        };
+        innerBorder.Controls.Add(resultPanel);
+
+        // Ícone de resultado (success/fail/neutral pode vir do EventResult)
+        bool isPositive = result.IsPositive; // true = bom, false = ruim
+        string resultIcon = isPositive ? "✅" : "⚠️";
+        Color resultColor = isPositive
+            ? ColorTranslator.FromHtml("#4caf50")
+            : ColorTranslator.FromHtml("#f44336");
+
+        Label lblResultTitle = new Label
+        {
+            Text = $"{resultIcon}  {result.Title}",   // Título do resultado (ex: "Você comprou o item!")
+            Font = new Font("Arial", 12, FontStyle.Bold),
+            ForeColor = resultColor,
+            Size = new Size(496, 28),
+            Location = new Point(12, 10),
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        resultPanel.Controls.Add(lblResultTitle);
+
+        Label lblResultDesc = new Label
+        {
+            Text = result.Description,   // Descrição do efeito (ex: "+3g adicionados ao inventário")
+            Font = new Font("Arial", 10),
+            ForeColor = ColorTranslator.FromHtml("#dddddd"),
+            Size = new Size(496, 80),
+            Location = new Point(12, 44),
+            TextAlign = ContentAlignment.TopLeft
+        };
+        resultPanel.Controls.Add(lblResultDesc);
+
+        // Botão continuar — prossegue para a fase de descanso
+        Button btnContinue = new Button
+        {
+            Text = "CONTINUAR →",
+            Font = new Font("Arial", 11, FontStyle.Bold),
+            BackColor = ColorTranslator.FromHtml("#37474f"),
+            ForeColor = Color.White,
+            Size = new Size(200, 42),
+            Location = new Point(187, 390),
+            FlatStyle = FlatStyle.Flat
+        };
+        btnContinue.FlatAppearance.BorderSize = 0;
+
+        // Ao continuar, aplica efeitos do resultado e vai para o descanso
+        btnContinue.Click += async (s, e) =>
+        {
+            await ApplyEventResult(result);
+            await ContinueToRestPhase();
+        };
+
+        innerBorder.Controls.Add(btnContinue);
+    }
+
+    /// <summary>
+    /// Aplica os efeitos mecânicos do resultado do evento no estado do jogo.
+    /// Adapte os campos de EventResult conforme sua implementação de IEventService.
+    /// </summary>
+    private async Task ApplyEventResult(EventResult result)
+    {
+        var heroAffected = team.First(a => a.Id == result.AffectedAgentId);
+        if (result.HpBonus != 0)
+        {
+            heroAffected.CurrentLife += result.HpBonus;
+            if(heroAffected.CurrentLife < 0)
+                heroAffected.CurrentLife = 0;
+        }
+
+        if (result.HpBonusMaxLife != 0)
+        {
+            heroAffected.MaxLife += result.HpBonusMaxLife;
+            if (heroAffected.MaxLife < 0)
+                heroAffected.MaxLife = 0;
+        }
+
+        if(result.GlobalShield != 0)
+        {
+            foreach (var hero in team)
+            {
+                if (!shields.ContainsKey(hero.Name))
+                    shields[hero.Name] = 0;
+                shields[hero.Name] += result.GlobalShield;
+            }
+        }
+
+        if (result.GlobalCure != 0)
+        {
+            foreach(var hero in team)
+            {
+                hero.CurrentLife += result.GlobalCure;
+                if (hero.CurrentLife < 0)
+                    hero.CurrentLife = 0;
+            }
+        }
+
+        if (result.PermanentAttack != 0)
+        {
+            heroAffected.BaseAttack += result.PermanentAttack;
+        }
+
+        if(result.ExtraDc != 0)
+        {
+            extraDc = result.ExtraDc;
+        }
+
+        if (result.TemporarySkillBonus != 0)
+        {
+            heroAffected.TemporarySkillBonus += result.TemporarySkillBonus;
+        }
+
+        if (result.TemporarySkillBonusSupport != 0)
+        {
+            foreach(var hero in team.Where(w => w.Type == AgentType.Suporte))
+            {
+                hero.TemporarySkillBonus += result.TemporarySkillBonusSupport;
+            }
+        }
+
+        if (result.GoldBonus != 0)
+        {
+            gold += result.GoldBonus;
+        }
+    }
+
+    /// <summary>
+    /// Wrapper que leva para a fase de descanso sem re-checar evento
+    /// (o evento já foi resolvido nesta chamada).
+    /// </summary>
+    private async Task ContinueToRestPhase()
+    {
+        await ExecuteRestPhase(); // método interno extraído abaixo
+    }
+
+#endregion
+
+    // =============================================================
+    // REFATORAÇÃO de NextLevelRestPhase()
+    // Extraia a lógica de descanso para ExecuteRestPhase() e ajuste
+    // NextLevelRestPhase() para chamar o evento ANTES do descanso.
+    // =============================================================
+
     #region TELA 5: Fase Descanso
+
     private async Task NextLevelRestPhase()
+    {
+        var randomEvent = await _eventService.RandomEvent();
+
+        if (randomEvent is not null)
+        {
+            // Exibe a tela de evento; ao fechar, ela chama ContinueToRestPhase → ExecuteRestPhase
+            await NextEventPhase(randomEvent);
+        }
+        else
+        {
+            // Sem evento: vai direto para o descanso
+            await ExecuteRestPhase();
+        }
+    }
+
+    /// <summary>
+    /// Tela de descanso em si (o que estava em NextLevelRestPhase antes).
+    /// Separado para que tanto o fluxo normal quanto o pós-evento possam chamá-la.
+    /// </summary>
+    private async Task ExecuteRestPhase()
     {
         ClearScreen();
         gold += 5; // Salário Base
@@ -740,10 +1171,29 @@ public class GameGUI : Form
         frame.Anchor = AnchorStyles.None;
         mainPanel.Controls.Add(frame);
 
-        Label lblTitle = new Label { Text = "☕ FASE DE DESCANSO", Font = new Font("Arial", 16, FontStyle.Bold), ForeColor = Color.White, Size = new Size(500, 40), TextAlign = ContentAlignment.MiddleCenter, Top = 10 };
+        Label lblTitle = new Label
+        {
+            Text = "☕ FASE DE DESCANSO",
+            Font = new Font("Arial", 16, FontStyle.Bold),
+            ForeColor = Color.White,
+            Size = new Size(500, 40),
+            TextAlign = ContentAlignment.MiddleCenter,
+            Top = 10
+        };
         frame.Controls.Add(lblTitle);
 
-        TextBox logBox = new TextBox { Multiline = true, ReadOnly = true, BackColor = ColorTranslator.FromHtml("#2d2d2d"), ForeColor = Color.White, Font = new Font("Arial", 10), Size = new Size(400, 150), Left = 50, Top = 70, BorderStyle = BorderStyle.None };
+        TextBox logBox = new TextBox
+        {
+            Multiline = true,
+            ReadOnly = true,
+            BackColor = ColorTranslator.FromHtml("#2d2d2d"),
+            ForeColor = Color.White,
+            Font = new Font("Arial", 10),
+            Size = new Size(400, 150),
+            Left = 50,
+            Top = 70,
+            BorderStyle = BorderStyle.None
+        };
         frame.Controls.Add(logBox);
 
         logBox.AppendText("💰 +5g de salário base depositados.\r\n");
@@ -751,35 +1201,38 @@ public class GameGUI : Form
         if (suportes > 0)
         {
             foreach (var a in team)
-            {
                 if (a.CurrentLife > 0) a.CurrentLife = Math.Min(a.MaxLife, a.CurrentLife + suportes);
-            }
             logBox.AppendText($"💚 {suportes} Suporte(s): Time recuperou +{suportes} de Vida.\r\n");
         }
 
-        var deathHeroes = team.Where(w => w.CurrentLife == 0);
-
-        if (deathHeroes.Any())
-        {
-            foreach(var hero in deathHeroes)
-            {
-                hero.CurrentLife = 1;
-            }
-        }
+        foreach (var hero in team.Where(w => w.CurrentLife == 0))
+            hero.CurrentLife = 1;
 
         roundBonuses["Escudo"] = defensores;
-        if (defensores > 0) logBox.AppendText($"🛡️ {defensores} Defensor(es): +{defensores} de Escudo para o próximo andar.\r\n");
+        if (defensores > 0)
+            logBox.AppendText($"🛡️ {defensores} Defensor(es): +{defensores} de Escudo para o próximo andar.\r\n");
 
         roundBonuses[Agent.Ataque] = lutadores;
         roundBonuses[Agent.Defesa] = lutadores;
-        if (lutadores > 0) logBox.AppendText($"🔥 {lutadores} Lutador(es): +{lutadores} de Fúria nos testes seguintes.\r\n");
+        if (lutadores > 0)
+            logBox.AppendText($"🔥 {lutadores} Lutador(es): +{lutadores} de Fúria nos testes seguintes.\r\n");
 
         roundBonuses["DC_Reduction"] = especialistas;
-        if (especialistas > 0) logBox.AppendText($"🧠 {especialistas} Especialista(s): DC alvo reduzida em -{especialistas}.\r\n");
+        if (especialistas > 0)
+            logBox.AppendText($"🧠 {especialistas} Especialista(s): DC alvo reduzida em -{especialistas}.\r\n");
 
         currentLevel++;
 
-        Button btnNext = new Button { Font = new Font("Arial", 11, FontStyle.Bold), BackColor = ColorTranslator.FromHtml("#2196f3"), ForeColor = Color.White, Size = new Size(200, 45), Left = 150, Top = 260, FlatStyle = FlatStyle.Flat };
+        Button btnNext = new Button
+        {
+            Font = new Font("Arial", 11, FontStyle.Bold),
+            BackColor = ColorTranslator.FromHtml("#2196f3"),
+            ForeColor = Color.White,
+            Size = new Size(200, 45),
+            Left = 150,
+            Top = 260,
+            FlatStyle = FlatStyle.Flat
+        };
 
         if (currentLevel > 5)
         {
@@ -789,13 +1242,82 @@ public class GameGUI : Form
         else
         {
             btnNext.Text = "IR PARA A LOJA 🛒";
-            btnNext.Click += (s, e) => {
+            btnNext.Click += (s, e) =>
+            {
                 market = _gameService.RollMarket(team, allAgents, currentLevel);
+                itemShop = RollItemShop(currentLevel);
                 rerollCount = 1;
                 CreateShopScreen().Wait();
             };
         }
         frame.Controls.Add(btnNext);
+    }
+
+    private List<Item> RollItemShop(int level)
+    {
+        // Peso de raridade cresce com o nível (igual ao RollMarket de heróis)
+        var pool = ItemCatalog.AllItems
+            .Where(i => i.Rarity <= Math.Min(level + 1, 5))
+            .ToList();
+
+        var result = new List<Item>();
+        while (result.Count < 3 && pool.Count > 0)
+        {
+            int idx = random.Next(pool.Count);
+            result.Add(pool[idx]);
+            pool.RemoveAt(idx);
+        }
+        return result;
+    }
+
+    private void ApplyItemEffect(Item item)
+    {
+        switch (item.Effect)
+        {
+            case ItemEffect.BonusAtaque:
+                roundBonuses[Agent.Ataque] += item.EffectValue;
+                break;
+            case ItemEffect.BonusDefesa:
+                roundBonuses[Agent.Defesa] += item.EffectValue;
+                break;
+            case ItemEffect.BonusPericia:
+                // Pericia não estava no roundBonuses; adicione no ResetGameState se quiser.
+                // Por ora, aplica direto nos heróis.
+                foreach (var hero in team) hero.BaseSkill += item.EffectValue;
+                break;
+            case ItemEffect.BonusHP:
+                foreach (var hero in team)
+                {
+                    hero.MaxLife += item.EffectValue;
+                    hero.CurrentLife = Math.Min(hero.CurrentLife + item.EffectValue, hero.MaxLife);
+                }
+                break;
+            case ItemEffect.BonusEscudo:
+                roundBonuses["Escudo"] += item.EffectValue;
+                break;
+            case ItemEffect.ReducaoDC:
+                roundBonuses["DC_Reduction"] += item.EffectValue;
+                break;
+        }
+    }
+
+    private async Task BuyItem(int idx)
+    {
+        Item item = itemShop[idx];
+        if (item == null) return;
+
+        if (gold >= item.Cost)
+        {
+            gold -= item.Cost;
+            ApplyItemEffect(item);
+            purchasedItems.Add(item);
+            itemShop[idx] = null;
+            await CreateShopScreen();
+        }
+        else
+        {
+            MessageBox.Show("Moedas insuficientes!", "Aviso", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
     }
 
     // ==========================================

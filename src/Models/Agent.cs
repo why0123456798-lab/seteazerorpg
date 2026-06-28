@@ -59,6 +59,11 @@ public class Agent
     public int MaxLife { get; set; }
     public int BaseSkill { get; set; }
 
+    public int TemporaryAttackBonus { get; set; } = 0;
+    public int TemporaryDefenseBonus { get; set; } = 0;
+    public int TemporarySkillBonus { get; set; } = 0;
+    public int TemporaryMaxLifeBonus { get; set; } = 0;
+
     public int CurrentLife { get; set; }
     public Dictionary<string, int> Fatigue { get; set; }
     public string ImageFilename { get; set; }
@@ -75,10 +80,10 @@ public class Agent
         Rarity = rarity; // Sem int.Parse!
         SynergyText = synergyText.Trim();
 
-        BaseAttack = ataque;   // Sem int.Parse!
-        BaseDefense = defesa; // Sem int.Parse!
-        MaxLife = vida;       // Sem int.Parse!
-        BaseSkill = pericia;   // Sem int.Parse!
+        BaseAttack = ataque + TemporaryAttackBonus;   // Sem int.Parse!
+        BaseDefense = defesa + TemporaryDefenseBonus; // Sem int.Parse!
+        MaxLife = vida + TemporaryMaxLifeBonus;       // Sem int.Parse!
+        BaseSkill = pericia + TemporarySkillBonus;   // Sem int.Parse!
 
         CurrentLife = MaxLife;
         Fatigue = new Dictionary<string, int> { { "Ataque", 0 }, { "Defesa", 0 }, { "Perícia", 0 } };
@@ -96,6 +101,11 @@ public class Agent
         Fatigue[Ataque] = 0;
         Fatigue[Defesa] = 0;
         Fatigue[Pericia] = 0;
+
+        TemporaryAttackBonus = 0;
+        TemporaryDefenseBonus = 0;
+        TemporarySkillBonus = 0;
+        TemporaryMaxLifeBonus = 0;
     }
 
     public int GetAttr(string attrName, List<Agent> teamAgents)
