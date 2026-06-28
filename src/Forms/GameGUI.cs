@@ -152,7 +152,7 @@ public class GameGUI : Form
     private async Task StartGame(string chosenMode)
     {
         mode = chosenMode;
-        market = _gameService.RollMarket(team, allAgents);
+        market = _gameService.RollMarket(team, allAgents, currentLevel);
         await CreateShopScreen();
     }
     #endregion
@@ -371,7 +371,7 @@ public class GameGUI : Form
         {
             gold -= rerollCount;
             rerollCount++;
-            market = _gameService.RollMarket(team, allAgents);
+            market = _gameService.RollMarket(team, allAgents, currentLevel);
             await CreateShopScreen();
         }
         else
@@ -790,7 +790,7 @@ public class GameGUI : Form
         {
             btnNext.Text = "IR PARA A LOJA 🛒";
             btnNext.Click += (s, e) => {
-                market = _gameService.RollMarket(team, allAgents);
+                market = _gameService.RollMarket(team, allAgents, currentLevel);
                 rerollCount = 1;
                 CreateShopScreen().Wait();
             };

@@ -20,12 +20,32 @@ namespace RPGBattleMaker.Infrastructure
             return allAgents.Where(a => !teamNames.Contains(a.Name)).ToList();
         }
 
-        public List<Agent> RollMarket(List<Agent> team, List<Agent> allAgents)
+        private static Dictionary<int, double> GetRarityWeight(int level)
+        {
+
+            var rarityWeights = new Dictionary<int, double> { };
+
+            if (level == 1 || level == 2)
+                rarityWeights = new Dictionary<int, double> { { 1, 0.60 }, { 2, 0.25 }, { 3, 0.10 }, { 4, 0.04 }, { 5, 0.01 } };
+            else if (level == 3 || level == 4)
+                rarityWeights = new Dictionary<int, double> { { 1, 0.40 }, { 2, 0.30 }, { 3, 0.15 }, { 4, 0.10 }, { 5, 0.05 } };
+            else if (level == 5 || level == 6)
+                rarityWeights = new Dictionary<int, double> { { 1, 0.15 }, { 2, 0.25 }, { 3, 0.30 }, { 4, 0.23 }, { 5, 0.07 } };
+            else
+                rarityWeights = new Dictionary<int, double> { { 1, 0.15 }, { 2, 0.20 }, { 3, 0.35 }, { 4, 0.20 }, { 5, 0.10 } };
+
+            return rarityWeights;
+        }
+
+        public List<Agent> RollMarket(List<Agent> team, List<Agent> allAgents, int level = 1)
         {
             var pool = GetMarketPool(team, allAgents);
             if (pool.Count == 0) return new List<Agent>();
 
-            var rarityWeights = new Dictionary<int, double> { { 1, 0.40 }, { 2, 0.30 }, { 3, 0.15 }, { 4, 0.10 }, { 5, 0.05 } };
+            #region
+            var rarityWeights = GetRarityWeight(level);
+
+            #endregion
             List<Agent> marketSlots = new List<Agent>();
             int slotsNecessarios = Math.Min(4, pool.Count);
 
