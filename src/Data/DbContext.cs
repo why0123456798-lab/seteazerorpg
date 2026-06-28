@@ -8,7 +8,7 @@ namespace RPGBattleMaker.Data
         private readonly string connectionString = "Data Source=rpg_battle.db";
         public DbContext()
         {
-            
+
         }
 
         public async Task InitializeDatabase()
@@ -17,673 +17,163 @@ namespace RPGBattleMaker.Data
             {
                 connection.Open();
 
+                // 1. Ativa explicitamente o suporte a Foreign Keys nesta conexão
+                using (var pragmaCmd = new SqliteCommand("PRAGMA foreign_keys = ON;", connection))
+                {
+                    pragmaCmd.ExecuteNonQuery();
+                }
+
+                // 2. Criação da Tabela Agentes (Garantindo a restrição de Primary Key de forma explícita)
                 string createTableQuery = @"
-            CREATE TABLE IF NOT EXISTS Agentes (
-                Agente TEXT, Tipo TEXT, 
-                Raridade INTEGER, Sinergias TEXT, Ataque INTEGER, 
-                Defesa INTEGER, Vida INTEGER, Pericia INTEGER
-            );";
+                CREATE TABLE IF NOT EXISTS Agentes (
+                    Id INTEGER NOT NULL,
+                    Agente TEXT, 
+                    Tipo TEXT, 
+                    Raridade INTEGER, 
+                    Ataque INTEGER, 
+                    Defesa INTEGER, 
+                    Vida INTEGER, 
+                    Pericia INTEGER,  
+                    Sinergias TEXT,
+                    PRIMARY KEY(Id AUTOINCREMENT)
+                );";
 
                 using (var createTableCmd = new SqliteCommand(createTableQuery, connection))
                 {
                     createTableCmd.ExecuteNonQuery();
                 }
 
-                // 2. RESETA O BANCO: Limpa todos os dados anteriores para garantir o estado original
+                // 3. Criação da Tabela Sinergias (Apontando exatamente para a coluna Id)
+                string createTableSynergyQuery = @"
+                CREATE TABLE IF NOT EXISTS Sinergias (
+                    Id INTEGER NOT NULL,
+                    AgenteId INTEGER,
+                    Tipo TEXT, 
+                    Name TEXT,
+                    PRIMARY KEY(Id AUTOINCREMENT),
+                    FOREIGN KEY(AgenteId) REFERENCES Agentes(Id) ON DELETE CASCADE
+                );";
+
+                using (var createTableSynergyCmd = new SqliteCommand(createTableSynergyQuery, connection))
+                {
+                    createTableSynergyCmd.ExecuteNonQuery();
+                }
+
+                // 4. RESETA O BANCO
+                using (var deleteCmd = new SqliteCommand("DELETE FROM Sinergias;", connection))
+                {
+                    deleteCmd.ExecuteNonQuery();
+                }
+
                 using (var deleteCmd = new SqliteCommand("DELETE FROM Agentes;", connection))
                 {
                     deleteCmd.ExecuteNonQuery();
                 }
 
-                // 3. SEED: Insere os valores originais e imutáveis direto via código
-                // Use uma transação para fazer as inserções de forma incrivelmente rápida
+                using (var sqliteSequenceCmd = new SqliteCommand("DELETE FROM sqlite_sequence WHERE name='Agentes' OR name='Sinergias';", connection))
+                {
+                    sqliteSequenceCmd.ExecuteNonQuery();
+                }
+
+                // 5. SEED: Insere os valores via transação
                 using (var transaction = connection.BeginTransaction())
                 {
-                    string insertQuery = @"
-                INSERT INTO Agentes (Agente, Tipo, Raridade, Sinergias, Ataque, Defesa, Vida, Pericia) 
-                VALUES ($agente, $tipo, $raridade, $sinergia, $ataque, $defesa, $vida, $pericia);";
+                    string insertHeroQuery = @"
+                    INSERT INTO Agentes (Agente, Tipo, Raridade, Ataque, Defesa, Vida, Pericia, Sinergias) 
+                    VALUES ($agente, $tipo, $raridade, $ataque, $defesa, $vida, $pericia, $sinergia);
+                    SELECT last_insert_rowid();";
 
-                    using (var insertCmd = new SqliteCommand(insertQuery, connection, transaction))
+                    string insertSynergyQuery = @"
+                    INSERT INTO Sinergias (AgenteId, Tipo, Name) 
+                    VALUES ($agenteId, $tipoSinergia, $nameSinergia);";
+
+                    using (var insertCmd = new SqliteCommand(insertHeroQuery, connection, transaction))
+                    using (var insertSynergyCmd = new SqliteCommand(insertSynergyQuery, connection, transaction))
                     {
-                        #region Heroes Insert
-                        // Herói 1: Kazumi
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Kazumi");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
-                        insertCmd.Parameters.AddWithValue("$raridade", 5);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri,Líder,Solo,Irmãs");
-                        insertCmd.Parameters.AddWithValue("$ataque", 4);
-                        insertCmd.Parameters.AddWithValue("$defesa", 4);
-                        insertCmd.Parameters.AddWithValue("$vida", 7);
-                        insertCmd.Parameters.AddWithValue("$pericia", 13);
-                        insertCmd.ExecuteNonQuery();
+                        void InserirAgenteComSinergias(string nome, string tipo, int raridade, int ataque, int defesa, int vida, int pericia, string sinergiasRaw)
+                        {
+                            insertCmd.Parameters.Clear();
+                            insertCmd.Parameters.AddWithValue("$agente", nome);
+                            insertCmd.Parameters.AddWithValue("$tipo", tipo);
+                            insertCmd.Parameters.AddWithValue("$raridade", raridade);
+                            insertCmd.Parameters.AddWithValue("$ataque", ataque);
+                            insertCmd.Parameters.AddWithValue("$defesa", defesa);
+                            insertCmd.Parameters.AddWithValue("$vida", vida);
+                            insertCmd.Parameters.AddWithValue("$pericia", pericia);
+                            insertCmd.Parameters.AddWithValue("$sinergia", sinergiasRaw);
 
-                        // Herói 2: Perdigas
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Perdigas");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
-                        insertCmd.Parameters.AddWithValue("$raridade", 5);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Ordem,Fé");
-                        insertCmd.Parameters.AddWithValue("$ataque", 2);
-                        insertCmd.Parameters.AddWithValue("$defesa", 2);
-                        insertCmd.Parameters.AddWithValue("$vida", 8);
-                        insertCmd.Parameters.AddWithValue("$pericia", 16);
-                        insertCmd.ExecuteNonQuery();
+                            long agenteId = (long)insertCmd.ExecuteScalar();
 
-                        // Herói 3: Maria Cecília
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Maria Cecília");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
-                        insertCmd.Parameters.AddWithValue("$raridade", 5);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Ordem,Nova Ordem");
-                        insertCmd.Parameters.AddWithValue("$ataque", 2);
-                        insertCmd.Parameters.AddWithValue("$defesa", 16);
-                        insertCmd.Parameters.AddWithValue("$vida", 8);
-                        insertCmd.Parameters.AddWithValue("$pericia", 2);
-                        insertCmd.ExecuteNonQuery();
+                            if (!string.IsNullOrEmpty(sinergiasRaw))
+                            {
+                                string[] sinergias = sinergiasRaw.Split(',');
+                                foreach (var sinergia in sinergias)
+                                {
+                                    insertSynergyCmd.Parameters.Clear();
+                                    insertSynergyCmd.Parameters.AddWithValue("$agenteId", agenteId);
+                                    insertSynergyCmd.Parameters.AddWithValue("$tipoSinergia", tipo);
+                                    insertSynergyCmd.Parameters.AddWithValue("$nameSinergia", sinergia.Trim());
+                                    insertSynergyCmd.ExecuteNonQuery();
+                                }
+                            }
+                        }
 
-                        // Herói 4: Crane
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Crane");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
-                        insertCmd.Parameters.AddWithValue("$raridade", 5);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Solo");
-                        insertCmd.Parameters.AddWithValue("$ataque", 17);
-                        insertCmd.Parameters.AddWithValue("$defesa", 2);
-                        insertCmd.Parameters.AddWithValue("$vida", 7);
-                        insertCmd.Parameters.AddWithValue("$pericia", 2);
-                        insertCmd.ExecuteNonQuery();
+                        // O restante da lista dos heróis permanece idêntica abaixo...
+                        InserirAgenteComSinergias("Kazumi", "Especialista", 5, 4, 4, 7, 13, "Hara-Kiri,Líder,Solo,Irmãs");
+                        InserirAgenteComSinergias("Perdigas", "Suporte", 5, 2, 2, 8, 16, "Ordem,Fé");
+                        InserirAgenteComSinergias("Maria Cecília", "Defensor", 5, 2, 16, 8, 2, "Ordem,Nova Ordem");
+                        InserirAgenteComSinergias("Crane", "Lutador", 5, 17, 2, 7, 2, "Solo");
+                        InserirAgenteComSinergias("Lilith", "Especialista", 5, 4, 4, 7, 13, "Vilão,Solo");
+                        InserirAgenteComSinergias("Agni", "Suporte", 4, 2, 2, 6, 12, "A chama");
+                        InserirAgenteComSinergias("Akane", "Lutador", 4, 13, 2, 5, 2, "Irmãs,Nova Ordem");
+                        InserirAgenteComSinergias("Tom", "Lutador", 4, 13, 2, 5, 2, "Nova Ordem");
+                        InserirAgenteComSinergias("Aziza", "Lutador", 4, 13, 2, 5, 2, "A chama");
+                        InserirAgenteComSinergias("Shiva", "Especialista", 4, 3, 3, 5, 11, "Irmãos,Caos");
+                        InserirAgenteComSinergias("Aya", "Suporte", 4, 2, 3, 7, 10, "Ninho do Dragão,Caos");
+                        InserirAgenteComSinergias("Caim", "Defensor", 4, 2, 13, 6, 1, "Vilão");
+                        InserirAgenteComSinergias("Viktor", "Defensor", 4, 2, 13, 6, 1, "Uagamora");
+                        InserirAgenteComSinergias("Gabriel", "Especialista", 4, 2, 1, 6, 13, "Nova Ordem");
+                        InserirAgenteComSinergias("Thoryn", "Defensor", 3, 1, 12, 5, 0, "Trindade,Fé");
+                        InserirAgenteComSinergias("Nix", "Suporte", 3, 1, 1, 5, 11, "Fé");
+                        InserirAgenteComSinergias("Zendaya", "Suporte", 3, 1, 1, 5, 11, "Trindade");
+                        InserirAgenteComSinergias("Daerion", "Defensor", 3, 3, 7, 6, 2, "Casal Real,Amor platônico,Ninho do Dragão,Dragão");
+                        InserirAgenteComSinergias("Shyvana", "Lutador", 3, 11, 1, 5, 1, "Uagamora,Dragão");
+                        InserirAgenteComSinergias("Symon", "Suporte", 3, 1, 1, 5, 11, "Uagamora");
+                        InserirAgenteComSinergias("Kael", "Lutador", 3, 11, 1, 5, 1, "Uagamora");
+                        InserirAgenteComSinergias("Arkmeros", "Suporte", 3, 1, 1, 5, 11, "Fé");
+                        InserirAgenteComSinergias("Ruivo", "Especialista", 3, 2, 0, 5, 11, "Vendedores,Ninho do Dragão");
+                        InserirAgenteComSinergias("Marionetista", "Especialista", 3, 2, 0, 5, 11, "Vilão");
+                        InserirAgenteComSinergias("Seph Flores", "Especialista", 3, 2, 0, 5, 11, "Hara-Kiri");
+                        InserirAgenteComSinergias("Barbara", "Lutador", 3, 11, 1, 5, 1, "Trindade");
+                        InserirAgenteComSinergias("Saphyra", "Lutador", 2, 9, 1, 3, 1, "Amor");
+                        InserirAgenteComSinergias("Oriven", "Especialista", 2, 2, 0, 4, 8, "Uagamora");
+                        InserirAgenteComSinergias("Megan", "Suporte", 2, 2, 0, 4, 8, "Hara-Kiri");
+                        InserirAgenteComSinergias("Cael", "Lutador", 2, 8, 1, 4, 1, "Ninho do Dragão");
+                        InserirAgenteComSinergias("Sirius", "Especialista", 2, 2, 0, 4, 8, "Caos");
+                        InserirAgenteComSinergias("Marcos", "Defensor", 2, 1, 8, 4, 1, "Hara-Kiri");
+                        InserirAgenteComSinergias("Shantal", "Suporte", 2, 1, 1, 4, 8, "A chama,Amor");
+                        InserirAgenteComSinergias("Lamblin", "Lutador", 2, 9, 1, 3, 1, "Solo");
+                        InserirAgenteComSinergias("Aryte", "Defensor", 2, 1, 8, 4, 1, "Uagamora");
+                        InserirAgenteComSinergias("Zahra", "Defensor", 2, 1, 8, 4, 1, "Vendedores");
+                        InserirAgenteComSinergias("Samir", "Lutador", 2, 6, 2, 3, 3, "Irmãos,Caos");
+                        InserirAgenteComSinergias("Nyu", "Especialista", 2, 2, 0, 4, 8, "Hara-Kiri");
+                        InserirAgenteComSinergias("Padre", "Suporte", 2, 1, 0, 4, 9, "Caos,Fé");
+                        InserirAgenteComSinergias("Orion", "Suporte", 1, 1, 1, 3, 5, "Fé");
+                        InserirAgenteComSinergias("Kru'el", "Especialista", 1, 1, 0, 3, 6, "Hara-Kiri");
+                        InserirAgenteComSinergias("Meilyn", "Lutador", 1, 6, 1, 3, 0, "Amor platônico,Ninho do Dragão");
+                        InserirAgenteComSinergias("Mauga", "Defensor", 1, 1, 6, 3, 0, "Uagamora");
+                        InserirAgenteComSinergias("Marcus", "Defensor", 1, 1, 6, 3, 0, "Líder,Nova Ordem");
+                        InserirAgenteComSinergias("Leão", "Especialista", 1, 1, 0, 3, 6, "Líder,Ordem");
+                        InserirAgenteComSinergias("Matheus", "Lutador", 1, 6, 1, 3, 0, "Nova Ordem");
+                        InserirAgenteComSinergias("Cronista", "Especialista", 1, 1, 0, 3, 6, "Uagamora");
+                        InserirAgenteComSinergias("Vysenia", "Lutador", 1, 4, 2, 2, 2, "Casal Real,Líder,Ninho do Dragão,Dragão");
+                        InserirAgenteComSinergias("Bree", "Suporte", 1, 1, 0, 3, 6, "Vendedores");
+                        InserirAgenteComSinergias("Mimoso", "Lutador", 1, 6, 1, 3, 0, "Vendedores");
+                        InserirAgenteComSinergias("Don Omar", "Especialista", 1, 1, 0, 3, 6, "Vendedores");
+                        InserirAgenteComSinergias("Yasmin", "Suporte", 1, 1, 1, 3, 5, "Vendedores,Fé");
+                        InserirAgenteComSinergias("Kyra", "Suporte", 1, 1, 1, 3, 5, "Uagamora");
 
-                        // Herói 5: Lilith
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Lilith");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
-                        insertCmd.Parameters.AddWithValue("$raridade", 5);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Vilão,Solo");
-                        insertCmd.Parameters.AddWithValue("$ataque", 4);
-                        insertCmd.Parameters.AddWithValue("$defesa", 4);
-                        insertCmd.Parameters.AddWithValue("$vida", 7);
-                        insertCmd.Parameters.AddWithValue("$pericia", 13);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 6: Agni
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Agni");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
-                        insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "A chama");
-                        insertCmd.Parameters.AddWithValue("$ataque", 2);
-                        insertCmd.Parameters.AddWithValue("$defesa", 2);
-                        insertCmd.Parameters.AddWithValue("$vida", 6);
-                        insertCmd.Parameters.AddWithValue("$pericia", 12);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 7: Akane
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Akane");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
-                        insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Irmãs,Nova Ordem");
-                        insertCmd.Parameters.AddWithValue("$ataque", 13);
-                        insertCmd.Parameters.AddWithValue("$defesa", 2);
-                        insertCmd.Parameters.AddWithValue("$vida", 5);
-                        insertCmd.Parameters.AddWithValue("$pericia", 2);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 8: Tom
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Tom");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
-                        insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Nova Ordem");
-                        insertCmd.Parameters.AddWithValue("$ataque", 13);
-                        insertCmd.Parameters.AddWithValue("$defesa", 2);
-                        insertCmd.Parameters.AddWithValue("$vida", 5);
-                        insertCmd.Parameters.AddWithValue("$pericia", 2);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 9: Aziza
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Aziza");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
-                        insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "A chama");
-                        insertCmd.Parameters.AddWithValue("$ataque", 13);
-                        insertCmd.Parameters.AddWithValue("$defesa", 2);
-                        insertCmd.Parameters.AddWithValue("$vida", 5);
-                        insertCmd.Parameters.AddWithValue("$pericia", 2);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 10: Shiva
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Shiva");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
-                        insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Irmãos,Caos");
-                        insertCmd.Parameters.AddWithValue("$ataque", 3);
-                        insertCmd.Parameters.AddWithValue("$defesa", 3);
-                        insertCmd.Parameters.AddWithValue("$vida", 5);
-                        insertCmd.Parameters.AddWithValue("$pericia", 11);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 11: Aya
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Aya");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
-                        insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Ninho do Dragão,Caos");
-                        insertCmd.Parameters.AddWithValue("$ataque", 2);
-                        insertCmd.Parameters.AddWithValue("$defesa", 3);
-                        insertCmd.Parameters.AddWithValue("$vida", 7);
-                        insertCmd.Parameters.AddWithValue("$pericia", 10);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 12: Caim
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Caim");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
-                        insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Vilão");
-                        insertCmd.Parameters.AddWithValue("$ataque", 2);
-                        insertCmd.Parameters.AddWithValue("$defesa", 13);
-                        insertCmd.Parameters.AddWithValue("$vida", 6);
-                        insertCmd.Parameters.AddWithValue("$pericia", 1);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 13: Viktor
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Viktor");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
-                        insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora");
-                        insertCmd.Parameters.AddWithValue("$ataque", 2);
-                        insertCmd.Parameters.AddWithValue("$defesa", 13);
-                        insertCmd.Parameters.AddWithValue("$vida", 6);
-                        insertCmd.Parameters.AddWithValue("$pericia", 1);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 14: Gabriel
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Gabriel");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
-                        insertCmd.Parameters.AddWithValue("$raridade", 4);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Nova Ordem");
-                        insertCmd.Parameters.AddWithValue("$ataque", 2);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 6);
-                        insertCmd.Parameters.AddWithValue("$pericia", 13);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 15: Thoryn
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Thoryn");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
-                        insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Trindade,Fé");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 12);
-                        insertCmd.Parameters.AddWithValue("$vida", 5);
-                        insertCmd.Parameters.AddWithValue("$pericia", 0);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 16: Nix
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Nix");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
-                        insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Fé");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 5);
-                        insertCmd.Parameters.AddWithValue("$pericia", 11);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 17: Zendaya
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Zendaya");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
-                        insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Trindade");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 5);
-                        insertCmd.Parameters.AddWithValue("$pericia", 11);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 18: Daerion
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Daerion");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
-                        insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Casal Real,Amor platônico,Ninho do Dragão,Dragão");
-                        insertCmd.Parameters.AddWithValue("$ataque", 3);
-                        insertCmd.Parameters.AddWithValue("$defesa", 7);
-                        insertCmd.Parameters.AddWithValue("$vida", 6);
-                        insertCmd.Parameters.AddWithValue("$pericia", 2);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 19: Shyvana
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Shyvana");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
-                        insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora,Dragão");
-                        insertCmd.Parameters.AddWithValue("$ataque", 11);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 5);
-                        insertCmd.Parameters.AddWithValue("$pericia", 1);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 20: Symon
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Symon");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
-                        insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 5);
-                        insertCmd.Parameters.AddWithValue("$pericia", 11);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 21: Kael
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Kael");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
-                        insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora");
-                        insertCmd.Parameters.AddWithValue("$ataque", 11);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 5);
-                        insertCmd.Parameters.AddWithValue("$pericia", 1);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 22: Arkmeros
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Arkmeros");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
-                        insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Fé");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 5);
-                        insertCmd.Parameters.AddWithValue("$pericia", 11);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 23: Ruivo
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Ruivo");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
-                        insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Vendedores,Ninho do Dragão");
-                        insertCmd.Parameters.AddWithValue("$ataque", 2);
-                        insertCmd.Parameters.AddWithValue("$defesa", 0);
-                        insertCmd.Parameters.AddWithValue("$vida", 5);
-                        insertCmd.Parameters.AddWithValue("$pericia", 11);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 24: Marionetista
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Marionetista");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
-                        insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Vilão");
-                        insertCmd.Parameters.AddWithValue("$ataque", 2);
-                        insertCmd.Parameters.AddWithValue("$defesa", 0);
-                        insertCmd.Parameters.AddWithValue("$vida", 5);
-                        insertCmd.Parameters.AddWithValue("$pericia", 11);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 25: Seph Flores
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Seph Flores");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
-                        insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri");
-                        insertCmd.Parameters.AddWithValue("$ataque", 2);
-                        insertCmd.Parameters.AddWithValue("$defesa", 0);
-                        insertCmd.Parameters.AddWithValue("$vida", 5);
-                        insertCmd.Parameters.AddWithValue("$pericia", 11);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 26: Barbara
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Barbara");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
-                        insertCmd.Parameters.AddWithValue("$raridade", 3);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Trindade");
-                        insertCmd.Parameters.AddWithValue("$ataque", 11);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 5);
-                        insertCmd.Parameters.AddWithValue("$pericia", 1);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 27: Saphyra
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Saphyra");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
-                        insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Amor");
-                        insertCmd.Parameters.AddWithValue("$ataque", 9);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 3);
-                        insertCmd.Parameters.AddWithValue("$pericia", 1);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 28: Oriven
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Oriven");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
-                        insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora");
-                        insertCmd.Parameters.AddWithValue("$ataque", 2);
-                        insertCmd.Parameters.AddWithValue("$defesa", 0);
-                        insertCmd.Parameters.AddWithValue("$vida", 4);
-                        insertCmd.Parameters.AddWithValue("$pericia", 8);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 29: Megan
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Megan");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
-                        insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri");
-                        insertCmd.Parameters.AddWithValue("$ataque", 2);
-                        insertCmd.Parameters.AddWithValue("$defesa", 0);
-                        insertCmd.Parameters.AddWithValue("$vida", 4);
-                        insertCmd.Parameters.AddWithValue("$pericia", 8);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 30: Cael
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Cael");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
-                        insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Ninho do Dragão");
-                        insertCmd.Parameters.AddWithValue("$ataque", 8);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 4);
-                        insertCmd.Parameters.AddWithValue("$pericia", 1);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 31: Sirius
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Sirius");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
-                        insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Caos");
-                        insertCmd.Parameters.AddWithValue("$ataque", 2);
-                        insertCmd.Parameters.AddWithValue("$defesa", 0);
-                        insertCmd.Parameters.AddWithValue("$vida", 4);
-                        insertCmd.Parameters.AddWithValue("$pericia", 8);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 32: Marcos
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Marcos");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
-                        insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 8);
-                        insertCmd.Parameters.AddWithValue("$vida", 4);
-                        insertCmd.Parameters.AddWithValue("$pericia", 1);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 33: Shantal
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Shantal");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
-                        insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "A chama,Amor");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 4);
-                        insertCmd.Parameters.AddWithValue("$pericia", 8);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 34: Lamblin
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Lamblin");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
-                        insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Solo");
-                        insertCmd.Parameters.AddWithValue("$ataque", 9);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 3);
-                        insertCmd.Parameters.AddWithValue("$pericia", 1);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 35: Aryte
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Aryte");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
-                        insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 8);
-                        insertCmd.Parameters.AddWithValue("$vida", 4);
-                        insertCmd.Parameters.AddWithValue("$pericia", 1);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 36: Zahra
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Zahra");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
-                        insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Vendedores");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 8);
-                        insertCmd.Parameters.AddWithValue("$vida", 4);
-                        insertCmd.Parameters.AddWithValue("$pericia", 1);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 37: Samir
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Samir");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
-                        insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Irmãos,Caos");
-                        insertCmd.Parameters.AddWithValue("$ataque", 6);
-                        insertCmd.Parameters.AddWithValue("$defesa", 2);
-                        insertCmd.Parameters.AddWithValue("$vida", 3);
-                        insertCmd.Parameters.AddWithValue("$pericia", 3);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 38: Nyu
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Nyu");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
-                        insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri");
-                        insertCmd.Parameters.AddWithValue("$ataque", 2);
-                        insertCmd.Parameters.AddWithValue("$defesa", 0);
-                        insertCmd.Parameters.AddWithValue("$vida", 4);
-                        insertCmd.Parameters.AddWithValue("$pericia", 8);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 39: Padre
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Padre");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
-                        insertCmd.Parameters.AddWithValue("$raridade", 2);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Caos,Fé");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 0);
-                        insertCmd.Parameters.AddWithValue("$vida", 4);
-                        insertCmd.Parameters.AddWithValue("$pericia", 9);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 40: Orion
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Orion");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
-                        insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Fé");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 3);
-                        insertCmd.Parameters.AddWithValue("$pericia", 5);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 41: Kru'el
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Kru'el");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
-                        insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Hara-Kiri");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 0);
-                        insertCmd.Parameters.AddWithValue("$vida", 3);
-                        insertCmd.Parameters.AddWithValue("$pericia", 6);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 42: Meilyn
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Meilyn");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
-                        insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Amor platônico,Ninho do Dragão");
-                        insertCmd.Parameters.AddWithValue("$ataque", 6);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 3);
-                        insertCmd.Parameters.AddWithValue("$pericia", 0);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 43: Mauga
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Mauga");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
-                        insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 6);
-                        insertCmd.Parameters.AddWithValue("$vida", 3);
-                        insertCmd.Parameters.AddWithValue("$pericia", 0);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 44: Marcus
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Marcus");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Defensor");
-                        insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Líder,Nova Ordem");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 6);
-                        insertCmd.Parameters.AddWithValue("$vida", 3);
-                        insertCmd.Parameters.AddWithValue("$pericia", 0);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 45: Leão
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Leão");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
-                        insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Líder,Ordem");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 0);
-                        insertCmd.Parameters.AddWithValue("$vida", 3);
-                        insertCmd.Parameters.AddWithValue("$pericia", 6);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 46: Matheus
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Matheus");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
-                        insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Nova Ordem");
-                        insertCmd.Parameters.AddWithValue("$ataque", 6);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 3);
-                        insertCmd.Parameters.AddWithValue("$pericia", 0);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 47: Cronista
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Cronista");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
-                        insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 0);
-                        insertCmd.Parameters.AddWithValue("$vida", 3);
-                        insertCmd.Parameters.AddWithValue("$pericia", 6);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 48: Vysenia
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Vysenia");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
-                        insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Casal Real,Líder,Ninho do Dragão,Dragão");
-                        insertCmd.Parameters.AddWithValue("$ataque", 4);
-                        insertCmd.Parameters.AddWithValue("$defesa", 2);
-                        insertCmd.Parameters.AddWithValue("$vida", 2);
-                        insertCmd.Parameters.AddWithValue("$pericia", 2);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 49: Bree
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Bree");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
-                        insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Vendedores");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 0);
-                        insertCmd.Parameters.AddWithValue("$vida", 3);
-                        insertCmd.Parameters.AddWithValue("$pericia", 6);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 50: Mimoso
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Mimoso");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Lutador");
-                        insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Vendedores");
-                        insertCmd.Parameters.AddWithValue("$ataque", 6);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 3);
-                        insertCmd.Parameters.AddWithValue("$pericia", 0);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 51: Don Omar
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Don Omar");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Especialista");
-                        insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Vendedores");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 0);
-                        insertCmd.Parameters.AddWithValue("$vida", 3);
-                        insertCmd.Parameters.AddWithValue("$pericia", 6);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 52: Yasmin
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Yasmin");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
-                        insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Vendedores,Fé");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 3);
-                        insertCmd.Parameters.AddWithValue("$pericia", 5);
-                        insertCmd.ExecuteNonQuery();
-
-                        // Herói 53: Kyra
-                        insertCmd.Parameters.Clear();
-                        insertCmd.Parameters.AddWithValue("$agente", "Kyra");
-                        insertCmd.Parameters.AddWithValue("$tipo", "Suporte");
-                        insertCmd.Parameters.AddWithValue("$raridade", 1);
-                        insertCmd.Parameters.AddWithValue("$sinergia", "Uagamora");
-                        insertCmd.Parameters.AddWithValue("$ataque", 1);
-                        insertCmd.Parameters.AddWithValue("$defesa", 1);
-                        insertCmd.Parameters.AddWithValue("$vida", 3);
-                        insertCmd.Parameters.AddWithValue("$pericia", 5);
-                        insertCmd.ExecuteNonQuery();
-                        #endregion
-
-                        transaction.Commit();
+                        await transaction.CommitAsync();
                     }
                 }
             }

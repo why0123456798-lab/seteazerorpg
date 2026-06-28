@@ -2,6 +2,7 @@
 using RPGBattleMaker.Data.Interface;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Text;
 
 namespace RPGBattleMaker.Data
@@ -19,7 +20,7 @@ namespace RPGBattleMaker.Data
             using (var connection = new SqliteConnection(connectionString))
             {
                 await connection.OpenAsync();
-                string selectQuery = "SELECT Agente, Tipo, Raridade, Sinergias, Ataque, Defesa, Vida, Pericia FROM Agentes;";
+                string selectQuery = "SELECT Id, Agente, Tipo, Raridade, Sinergias, Ataque, Defesa, Vida, Pericia FROM Agentes;";
 
                 using (var selectCmd = new SqliteCommand(selectQuery, connection))
                 using (var reader = await selectCmd.ExecuteReaderAsync())
@@ -29,17 +30,18 @@ namespace RPGBattleMaker.Data
                     while (await reader.ReadAsync())
                     {
                         // Resgata os dados mapeados na ordem exata do SELECT acima
-                        string name = reader.GetString(0);
-                        string type = reader.GetString(1);
-                        int rarity = reader.GetInt32(2);
-                        string synergyText = reader.IsDBNull(3) ? "" : reader.GetString(5);
-                        int ataque = reader.GetInt32(4);
-                        int defesa = reader.GetInt32(5);
-                        int vida = reader.GetInt32(6);
-                        int pericia = reader.GetInt32(7);
+                        int id = reader.GetInt32(0);
+                        string name = reader.GetString(1);
+                        string type = reader.GetString(2);
+                        int rarity = reader.GetInt32(3);
+                        string synergyText = reader.IsDBNull(4) ? "" : reader.GetString(5);
+                        int ataque = reader.GetInt32(5);
+                        int defesa = reader.GetInt32(6);
+                        int vida = reader.GetInt32(7);
+                        int pericia = reader.GetInt32(8);
 
                         // Instancia o agente usando o novo construtor limpo!
-                        Agent agent = new Agent(name, type, rarity, synergyText, ataque, defesa, vida, pericia);
+                        Agent agent = new Agent(id, name, type, rarity, synergyText, ataque, defesa, vida, pericia);
 
                         allAgents.Add(agent);
                     }
@@ -47,30 +49,31 @@ namespace RPGBattleMaker.Data
             }
         }
 
-        public async Task<List<string>> GetHeroSynergies(string heroName)
+        public async Task<List<string>> GetHeroSynergies(int heroId)
         {
             List<string> synergies = new List<string>();
 
             using (var connection = new SqliteConnection(connectionString))
             {
                 await connection.OpenAsync();
-                var selectQuery = "SELECT Sinergias FROM Agentes WHERE Agente = $nome;";
+
+                // O SELECT continua igual, buscando o Name de todas as linhas do AgenteId informado
+                var selectQuery = "SELECT Name FROM Sinergias WHERE AgenteId = $agentId;";
 
                 using (var selectCmd = new SqliteCommand(selectQuery, connection))
                 {
-                    selectCmd.Parameters.AddWithValue("$nome", heroName);
+                    selectCmd.Parameters.AddWithValue("$agentId", heroId);
 
                     using (var reader = await selectCmd.ExecuteReaderAsync())
                     {
-                        if (await reader.ReadAsync() && !reader.IsDBNull(0))
+                        // Mudamos de "if" para "while", pois o banco retornará múltiplas linhas (uma para cada sinergia)
+                        while (await reader.ReadAsync())
                         {
-                            string sinergiasTexto = reader.GetString(0);
-
-                            // Faz o Split eliminando espaços ou entradas vazias
-                            synergies = sinergiasTexto
-                                .Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                                .Select(s => s.Trim())
-                                .ToList();
+                            if (!reader.IsDBNull(0))
+                            {
+                                // Adiciona a sinergia da linha atual diretamente na lista
+                                synergies.Add(reader.GetString(0));
+                            }
                         }
                     }
                 }
@@ -79,31 +82,32 @@ namespace RPGBattleMaker.Data
             }
         }
 
-        public async Task<Agent> GetHeroByName(string agent)
+        public async Task<Agent> GetHeroById(int heroId)
         {
 
             using (var connection = new SqliteConnection(connectionString))
             {
                 await connection.OpenAsync();
-                string selectQuery = "SELECT Agente, Tipo, Raridade, Sinergias, Ataque, Defesa, Vida, Pericia FROM Agentes WHERE Agente = @heroName;";
+                string selectQuery = "SELECT Id, Agente, Tipo, Raridade, Sinergias, Ataque, Defesa, Vida, Pericia FROM Agentes WHERE Id = @heroId;";
 
                 using (var selectCmd = new SqliteCommand(selectQuery, connection))
                 {
-                    selectCmd.Parameters.AddWithValue("@heroName", agent);
+                    selectCmd.Parameters.AddWithValue("@heroId", heroId);
 
                     using (var reader = await selectCmd.ExecuteReaderAsync())
                     {
                         // Resgata os dados mapeados na ordem exata do SELECT acima
-                        string name = reader.GetString(0);
-                        string type = reader.GetString(1);
-                        int rarity = reader.GetInt32(4);
-                        string synergyText = reader.IsDBNull(5) ? "" : reader.GetString(5);
-                        int ataque = reader.GetInt32(6);
-                        int defesa = reader.GetInt32(7);
-                        int vida = reader.GetInt32(8);
-                        int pericia = reader.GetInt32(9);
+                        int id = reader.GetInt32(0);
+                        string name = reader.GetString(1);
+                        string type = reader.GetString(2);
+                        int rarity = reader.GetInt32(3);
+                        string synergyText = reader.IsDBNull(4) ? "" : reader.GetString(4);
+                        int ataque = reader.GetInt32(5);
+                        int defesa = reader.GetInt32(6);
+                        int vida = reader.GetInt32(7);
+                        int pericia = reader.GetInt32(8);
 
-                        return new Agent(name, type, rarity, synergyText, ataque, defesa, vida, pericia);
+                        return new Agent(id, name, type, rarity, synergyText, ataque, defesa, vida, pericia);
 
                     }
                 }

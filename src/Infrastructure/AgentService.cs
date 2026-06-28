@@ -59,7 +59,7 @@ namespace RPGBattleMaker.Infrastructure
         {
             var synergyAgents = new SynergyAgents();
 
-            var heroSynergies = await GetSynergiesForHero(agent.Name);
+            var heroSynergies = await GetSynergiesForHero(agent.Id);
 
             if (!string.IsNullOrEmpty(heroSynergies))
             {
@@ -77,9 +77,9 @@ namespace RPGBattleMaker.Infrastructure
         }
 
         // Função que descobre TODAS as sinergias que um determinado herói possui
-        public async Task<string> GetSynergiesForHero(string heroName)
+        public async Task<string> GetSynergiesForHero(int heroId)
         {
-            var result = await _agentRepository.GetHeroSynergies(heroName);
+            var result = await _agentRepository.GetHeroSynergies(heroId);
 
             return string.Join(", ", result);
         }
@@ -89,7 +89,7 @@ namespace RPGBattleMaker.Infrastructure
             int bonus = 0;
 
             // Buscando assincronamente as sinergias do agente atual usando o parâmetro recebido
-            List<string> mySynergies = await _agentRepository.GetHeroSynergies(currentAgent.Name);
+            List<string> mySynergies = await _agentRepository.GetHeroSynergies(currentAgent.Id);
 
             if (mySynergies.Count == 0) return 0;
 
@@ -98,7 +98,7 @@ namespace RPGBattleMaker.Infrastructure
 
             foreach (var agent in teamAgents)
             {
-                var synergies = await _agentRepository.GetHeroSynergies(agent.Name);
+                var synergies = await _agentRepository.GetHeroSynergies(agent.Id);
                 teamSynergiesMap[agent.Name] = synergies;
             }
 

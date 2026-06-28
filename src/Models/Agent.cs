@@ -46,7 +46,7 @@
 
 public class Agent
 {
-    public AgentType agentType { get; set; }
+    public int Id { get; set; }
     public string Name { get; set; }
     public string Type { get; set; }
     public string Desc { get; set; }
@@ -67,8 +67,9 @@ public class Agent
     public const string Defesa = "Defesa";
     public const string Pericia = "Pericia";
 
-    public Agent(string name, string type, int rarity, string synergyText, int ataque, int defesa, int vida, int pericia)
+    public Agent(int id, string name, string type, int rarity, string synergyText, int ataque, int defesa, int vida, int pericia)
     {
+        Id = id;
         Name = name;
         Type = type;
         Rarity = rarity; // Sem int.Parse!
