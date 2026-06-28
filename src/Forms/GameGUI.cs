@@ -361,7 +361,7 @@ public class GameGUI : Form
 
             if (agent == null)
             {
-                Label lbl = new Label { Text = " COMPRADO ", Font = new Font("Arial", 11, FontStyle.Italic), ForeColor = Color.Gray, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter };
+                Label lbl = new Label { Text = "✅ COMPRADO ", Font = new Font("Arial", 11, FontStyle.Italic), ForeColor = Color.Gray, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter };
                 card.Controls.Add(lbl);
             }
             else
