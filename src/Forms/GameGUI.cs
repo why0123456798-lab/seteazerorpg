@@ -215,6 +215,20 @@ public class GameGUI : Form
         btnReroll.Click += (s, e) => RerollShop().Wait();
         topFrame.Controls.Add(btnReroll);
 
+        Button btnRestart = new Button
+        {
+            Text = $"🔄 Recomeçar",
+            Font = new Font("Arial", 10, FontStyle.Regular),
+            BackColor = ColorTranslator.FromHtml("#4287f5"),
+            ForeColor = Color.White,
+            Size = new Size(160, 40),
+            Location = new Point(topFrame.Width - 520, 10),
+            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            FlatStyle = FlatStyle.Flat
+        };
+        btnRestart.Click += (s, e) => RestartEntireGame();
+        topFrame.Controls.Add(btnRestart);
+
         // Conteineres do Mercado e Time
         TableLayoutPanel mainLayout = new TableLayoutPanel
         {
