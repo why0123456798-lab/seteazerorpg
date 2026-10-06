@@ -19,7 +19,7 @@ public class GameGUI : Form
     private readonly IAgentService _agentService;
     private readonly IGameService _gameService;
     private readonly IEventService _eventService;
-    private readonly ILocalEventGenerator _localEventGenerator;
+    private readonly IBattleNarrator _battleNarrator;
 
     private List<Item> itemShop = new List<Item>();
     private List<Item> purchasedItems = new List<Item>();
@@ -36,7 +36,7 @@ public class GameGUI : Form
     private List<Agent> market = new List<Agent>();
     private int rerollCount = 1;
 
-    private readonly List<string> generatedEventHistory = new();
+    private readonly List<string> battleStoryHistory = new();
 
     // Estado da Batalha/Missão
     private string currentTheme = Agent.Ataque;
@@ -66,12 +66,12 @@ public class GameGUI : Form
         IAgentService agentService,
         IGameService gameService,
         IEventService eventService,
-        ILocalEventGenerator localEventGenerator)
+        IBattleNarrator battleNarrator)
     {
         _agentService = agentService;
         _gameService = gameService;
         _databaseInitializer = databaseInitializer;
-        _localEventGenerator = localEventGenerator;
+        _battleNarrator = battleNarrator;
 
         this.Text = "RPG Autobattler Roguelike";
         this.Size = new Size(1440, 900);
@@ -116,7 +116,7 @@ public class GameGUI : Form
         rerollCount = 1;
         roundBonuses = new Dictionary<string, int> { { Agent.Ataque, 0 }, { Agent.Defesa, 0 }, { "Escudo", 0 }, { "DC_Reduction", 0 } };
         market.Clear();
-        generatedEventHistory.Clear();
+        battleStoryHistory.Clear();
 
         #region Populate Data from DB
         _databaseInitializer.InitializeDatabase().Wait();
@@ -1231,6 +1231,7 @@ public class GameGUI : Form
     private async Task StartMissionPhase()
     {
         ClearScreen();
+        battleStoryHistory.Clear();
 
         string[] themes = { Agent.Ataque, Agent.Defesa, Agent.Pericia };
         currentTheme = themes[random.Next(themes.Length)];
@@ -1330,8 +1331,14 @@ public class GameGUI : Form
         btnRoll.Click += async (s, e) => await NextTestRoll();
         battleFrame.Controls.Add(btnRoll);
 
-        await AppendLog("Fase preparada. Identificando combatentes viáveis...", Color.White);
         await SetupNextCombatantInfo();
+
+        if (bestHero is not null)
+        {
+            btnRoll.Enabled = false;
+            await GenerateBattleStoryAsync(isInitial: true);
+            btnRoll.Enabled = true;
+        }
     }
 
     private async Task AppendLog(string text, Color color)
@@ -1384,37 +1391,63 @@ public class GameGUI : Form
             return;
         }
 
+        btnRoll.Enabled = false;
+
+        int round = testeNum;
+        Agent rollingHero = bestHero;
         int d20 = random.Next(1, 21);
         int total = bestVal + d20;
 
-        await AppendLog($"\n--- TESTE {testeNum}/5 ({bestHero.Name}) ---", Color.White);
+        await AppendLog($"\n--- TESTE {round}/5 ({rollingHero.Name}) ---", Color.White);
         await AppendLog($"Resultado do dado: {d20} | Total: {total} vs Alvo {dc}", Color.White);
+
+        string outcome;
+        string outcomeDetail;
 
         if (mode == "Difícil" && d20 == 20)
         {
+            outcome = "CRÍTICO POSITIVO";
+            outcomeDetail = "A rodada contou como 2 sucessos.";
             await AppendLog("🌟 CRÍTICO POSITIVO! Contando como 2 SUCESSOS!", Color.Green);
             sucessos += 2;
         }
         else if (mode == "Difícil" && d20 == 1)
         {
+            outcome = "CRÍTICO NEGATIVO";
+            outcomeDetail = $"{rollingHero.Name} sofreu a consequência crítica e recebeu dano.";
             await AppendLog("💀 CRÍTICO NEGATIVO! 1 Falha Crítica anotada.", Color.Red);
             falhas += 2;
-            await ApplyGuiDamage(bestHero, currentLevel * 2);
+            await ApplyGuiDamage(rollingHero, currentLevel * 2);
         }
         else if (total >= dc)
         {
+            outcome = "SUCESSO";
+            outcomeDetail = "A ação foi bem-sucedida e a equipe avançou.";
             await AppendLog("🟢 SUCESSO!", Color.Green);
             sucessos += 1;
         }
         else
         {
+            outcome = "FALHA";
+            outcomeDetail = $"{rollingHero.Name} sofreu as consequências da falha e recebeu dano.";
             await AppendLog("🔴 FALHA!", Color.Red);
             falhas += 1;
-            await ApplyGuiDamage(bestHero, currentLevel);
+            await ApplyGuiDamage(rollingHero, currentLevel);
         }
 
-        if (!bestHero.Fatigue.ContainsKey(currentTheme)) bestHero.Fatigue[currentTheme] = 0;
-        bestHero.Fatigue[currentTheme] += 1;
+        if (!rollingHero.Fatigue.ContainsKey(currentTheme))
+            rollingHero.Fatigue[currentTheme] = 0;
+
+        rollingHero.Fatigue[currentTheme] += 1;
+
+        await GenerateBattleStoryAsync(
+            isInitial: false,
+            hero: rollingHero,
+            round: round,
+            d20: d20,
+            total: total,
+            outcome: outcome,
+            outcomeDetail: outcomeDetail);
 
         testeNum++;
 
@@ -1427,6 +1460,59 @@ public class GameGUI : Form
         {
             await SetupNextCombatantInfo();
         }
+
+        btnRoll.Enabled = true;
+    }
+
+    private async Task GenerateBattleStoryAsync(
+        bool isInitial,
+        Agent? hero = null,
+        int round = 1,
+        int d20 = 0,
+        int total = 0,
+        string outcome = "",
+        string outcomeDetail = "")
+    {
+        Agent storyHero = hero ?? bestHero;
+        if (storyHero is null)
+            return;
+
+        if (!isInitial)
+            await AppendLog("\n✦ A batalha continua... a história se atualiza. ✦", Color.Orange);
+        else
+            await AppendLog("\n✦ A batalha começa... ✦", Color.Orange);
+
+        BattleNarrativeContext context = new()
+        {
+            Level = currentLevel,
+            Theme = currentTheme,
+            Hero = storyHero,
+            Round = round,
+            D20 = d20,
+            Total = total,
+            Dc = dc,
+            IsInitial = isInitial,
+            Outcome = outcome,
+            OutcomeDetail = outcomeDetail,
+            Team = team.ToList(),
+            Items = purchasedItems.ToList(),
+            PreviousStories = battleStoryHistory.ToList()
+        };
+
+        BattleStory? story = await _battleNarrator.GenerateAsync(context);
+
+        if (story is null)
+        {
+            await AppendLog(
+                "A narrativa não pôde ser gerada, mas os acontecimentos mecânicos da batalha continuam.",
+                Color.Gray);
+            return;
+        }
+
+        await AppendLog($"📖 {story.Title}", Color.Gold);
+        await AppendLog(story.Narrative, Color.White);
+
+        battleStoryHistory.Add($"{story.Title}: {story.Narrative}");
     }
 
     private async Task ApplyGuiDamage(Agent hero, int dano)
@@ -1810,33 +1896,7 @@ public class GameGUI : Form
 
     private async Task NextLevelRestPhase()
     {
-        Event? mechanicsTemplate = await _eventService.RandomEvent();
-
-        if (mechanicsTemplate is not null)
-        {
-            ShowEventGenerationScreen();
-
-            Event? generatedEvent = await _localEventGenerator.GenerateAsync(
-                mechanicsTemplate,
-                team,
-                purchasedItems,
-                currentLevel,
-                gold,
-                generatedEventHistory);
-
-            Event eventToShow = generatedEvent ?? mechanicsTemplate;
-
-            if (generatedEvent is not null)
-                generatedEventHistory.Add(generatedEvent.Name ?? "Evento sem nome");
-
-            // A IA altera apenas narrativa e escolhas.
-            // O Id continua sendo o do evento mecânico, então o C# controla os resultados.
-            await NextEventPhase(eventToShow);
-        }
-        else
-        {
-            await ExecuteRestPhase();
-        }
+        await ExecuteRestPhase();
     }
 
     private void ShowEventGenerationScreen()

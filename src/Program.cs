@@ -32,7 +32,7 @@ namespace RPGBattleMaker
                     services.AddSingleton<IAgentService, AgentService>();
                     services.AddSingleton<IGameService, GameService>();
                     services.AddSingleton<IEventService, EventService>();
-                    services.AddSingleton<ILocalEventGenerator, LocalEventGenerator>();
+                    services.AddSingleton<IBattleNarrator, LocalBattleNarrator>();
 
                     services.AddTransient<GameGUI>();
                 })
