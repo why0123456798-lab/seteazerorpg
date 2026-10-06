@@ -23,73 +23,14 @@ namespace RPGBattleMaker.Infrastructure.Database
                     await pragmaCmd.ExecuteNonQueryAsync();
                 }
 
-                string createTableEventsQuery = @"
-                CREATE TABLE IF NOT EXISTS Events (
-                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    Name TEXT NOT NULL,
-                    Description TEXT NOT NULL,
-                    OptionA TEXT NOT NULL,
-                    OptionB TEXT NOT NULL,
-                    OptionC TEXT NOT NULL
-                );";
-
-                using (var createTableCmd = new SqliteCommand(createTableEventsQuery, connection))
+                // Eventos agora são gerados pela IA local.
+                // Removemos a antiga tabela/seed de histórias hardcoded.
+                using (var dropEventsCmd = new SqliteCommand("DROP TABLE IF EXISTS Events;", connection))
                 {
-                    await createTableCmd.ExecuteNonQueryAsync();
+                    await dropEventsCmd.ExecuteNonQueryAsync();
                 }
 
-                using (var countEventsCmd = new SqliteCommand("SELECT COUNT(*) FROM Events;", connection))
-                {
-                    var eventCount = Convert.ToInt32(await countEventsCmd.ExecuteScalarAsync());
-                    if (eventCount > 0)
-                        return;
-                }
-
-                // Seed inicial
-                #region Events
-                using (var transaction = connection.BeginTransaction())
-                {
-                    string insertEventsQuery = @"
-                    INSERT INTO Events (Name, Description, OptionA, OptionB, OptionC) 
-                    VALUES ($name, $description, $optionA, $optionB, $optionC);";
-
-                    using (var insertEventCmd = new SqliteCommand(insertEventsQuery, connection, transaction))
-                    {
-                        async Task InserirEvento(string nome, string descricao, string opcaoA, string opcaoB, string opcaoC)
-                        {
-                            insertEventCmd.Parameters.Clear();
-                            insertEventCmd.Parameters.AddWithValue("$name", nome);
-                            insertEventCmd.Parameters.AddWithValue("$description", descricao);
-                            insertEventCmd.Parameters.AddWithValue("$optionA", opcaoA);
-                            insertEventCmd.Parameters.AddWithValue("$optionB", opcaoB);
-                            insertEventCmd.Parameters.AddWithValue("$optionC", opcaoC);
-                            await insertEventCmd.ExecuteNonQueryAsync();
-                        }
-
-                        await InserirEvento("O Mercador Errante de Uagamora", 
-                            "Um mercador encapuzado surge das sombras oferecendo uma relíquia antiga por um preço suspeito, mas ele parece nervoso e olha para os lados",
-                            "Intimidar o mercador.",
-                            "Negociar pacientemente.",
-                            "Recusar e seguir em frente.");
-
-                        await InserirEvento("A Fonte de Luz Corrompida",
-                            "O grupo encontra uma fonte mágica brilhante, mas que exala uma energia instável e corrompida pelo Caos.",
-                            "Beber a água e resistir à corrupção.",
-                            "Canalizar a energia da fonte.",
-                            "Ignorar a fonte por segurança.");
-
-                        await InserirEvento("O Altar dos Antigos Reis",
-                            "Um altar majestoso dedicado aos antigos soberanos de Vysenia brilha ao longe, exigindo uma prova de valor (ou profanação) em troca de poder.",
-                            "Realizar uma prece ritualística perfeita.",
-                            "Destruir o altar para roubar as joias da coroa.",
-                            "Prestar respeito de longe e ir embora.");
-
-                        await transaction.CommitAsync();
-                    }
-                }
-                #endregion
-
-                // 2. Criação da Tabela Agentes (Garantindo a restrição de Primary Key de forma explícita)
+                // 1. Criação da Tabela Agentes (Garantindo a restrição de Primary Key de forma explícita)
                 string createTableQuery = @"
                 CREATE TABLE IF NOT EXISTS Agentes (
                     Id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -123,7 +64,14 @@ namespace RPGBattleMaker.Infrastructure.Database
                     await createTableSynergyCmd.ExecuteNonQueryAsync();
                 }
 
-                // 5. SEED: Insere os valores via transação
+                // 5. SEED: insere os heróis apenas quando a tabela ainda estiver vazia.
+                using (var countAgentsCmd = new SqliteCommand("SELECT COUNT(*) FROM Agentes;", connection))
+                {
+                    int agentCount = Convert.ToInt32(await countAgentsCmd.ExecuteScalarAsync());
+                    if (agentCount > 0)
+                        return;
+                }
+
                 using (var transaction = connection.BeginTransaction())
                 {
                     string insertHeroQuery = @"

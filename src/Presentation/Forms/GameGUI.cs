@@ -19,6 +19,7 @@ public class GameGUI : Form
     private readonly IAgentService _agentService;
     private readonly IGameService _gameService;
     private readonly IEventService _eventService;
+    private readonly ILocalEventGenerator _localEventGenerator;
 
     private List<Item> itemShop = new List<Item>();
     private List<Item> purchasedItems = new List<Item>();
@@ -34,6 +35,8 @@ public class GameGUI : Form
     private Dictionary<string, int> roundBonuses = new Dictionary<string, int>();
     private List<Agent> market = new List<Agent>();
     private int rerollCount = 1;
+
+    private readonly List<string> generatedEventHistory = new();
 
     // Estado da Batalha/Missão
     private string currentTheme = Agent.Ataque;
@@ -58,11 +61,17 @@ public class GameGUI : Form
     #endregion
 
     #region Constructor
-    public GameGUI(IDatabaseInitializer databaseInitializer, IAgentService agentService, IGameService gameService, IEventService eventService)
+    public GameGUI(
+        IDatabaseInitializer databaseInitializer,
+        IAgentService agentService,
+        IGameService gameService,
+        IEventService eventService,
+        ILocalEventGenerator localEventGenerator)
     {
         _agentService = agentService;
         _gameService = gameService;
         _databaseInitializer = databaseInitializer;
+        _localEventGenerator = localEventGenerator;
 
         this.Text = "RPG Autobattler Roguelike";
         this.Size = new Size(1440, 900);
@@ -107,6 +116,7 @@ public class GameGUI : Form
         rerollCount = 1;
         roundBonuses = new Dictionary<string, int> { { Agent.Ataque, 0 }, { Agent.Defesa, 0 }, { "Escudo", 0 }, { "DC_Reduction", 0 } };
         market.Clear();
+        generatedEventHistory.Clear();
 
         #region Populate Data from DB
         _databaseInitializer.InitializeDatabase().Wait();
@@ -776,7 +786,7 @@ public class GameGUI : Form
                     Height = 30,
                     FlatStyle = FlatStyle.Flat
                 };
-                btnBuyItem.Click += (s, e) => BuyItem(itemIdx).Wait();
+                btnBuyItem.Click += async (s, e) => await BuyItem(itemIdx);
                 ApplyButtonHover(btnBuyItem, ColorTranslator.FromHtml("#795548"), ColorTranslator.FromHtml("#956d5a"));
                 itemCard.Controls.Add(btnBuyItem);
 
@@ -1006,7 +1016,7 @@ public class GameGUI : Form
                     Height = 30,
                     FlatStyle = FlatStyle.Flat
                 };
-                btnBuy.Click += (s, e) => BuyAgent(index).Wait();
+                btnBuy.Click += async (s, e) => await BuyAgent(index);
                 ApplyButtonHover(btnBuy, ColorTranslator.FromHtml("#4caf50"), ColorTranslator.FromHtml("#62c76b"));
                 card.Controls.Add(btnBuy);
 
@@ -1095,7 +1105,7 @@ public class GameGUI : Form
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 FlatStyle = FlatStyle.Flat
             };
-            btnSell.Click += (s, e) => SellAgent(index).Wait();
+            btnSell.Click += async (s, e) => await SellAgent(index);
             card.Controls.Add(btnSell);
 
             void ResizeTeamCard(object? sender, EventArgs e)
@@ -1317,7 +1327,7 @@ public class GameGUI : Form
             Anchor = AnchorStyles.Top,
             FlatStyle = FlatStyle.Flat
         };
-        btnRoll.Click += (s, e) => NextTestRoll().Wait();
+        btnRoll.Click += async (s, e) => await NextTestRoll();
         battleFrame.Controls.Add(btnRoll);
 
         await AppendLog("Fase preparada. Identificando combatentes viáveis...", Color.White);
@@ -1508,7 +1518,7 @@ public class GameGUI : Form
             frame.Controls.Add(lblRes);
 
             Button btnContinue = new Button { Text = "AVANÇAR PARA DESCANSO", Font = new Font("Arial", 11, FontStyle.Bold), BackColor = ColorTranslator.FromHtml("#4caf50"), ForeColor = Color.White, Size = new Size(220, 45), Left = 140, Top = 200, FlatStyle = FlatStyle.Flat };
-            btnContinue.Click += (s, e) => NextLevelRestPhase().Wait();
+            btnContinue.Click += async (s, e) => await NextLevelRestPhase();
             frame.Controls.Add(btnContinue);
         }
     }
@@ -1800,18 +1810,72 @@ public class GameGUI : Form
 
     private async Task NextLevelRestPhase()
     {
-        var randomEvent = await _eventService.RandomEvent();
+        Event? mechanicsTemplate = await _eventService.RandomEvent();
 
-        if (randomEvent is not null)
+        if (mechanicsTemplate is not null)
         {
-            // Exibe a tela de evento; ao fechar, ela chama ContinueToRestPhase → ExecuteRestPhase
-            await NextEventPhase(randomEvent);
+            ShowEventGenerationScreen();
+
+            Event? generatedEvent = await _localEventGenerator.GenerateAsync(
+                mechanicsTemplate,
+                team,
+                purchasedItems,
+                currentLevel,
+                gold,
+                generatedEventHistory);
+
+            Event eventToShow = generatedEvent ?? mechanicsTemplate;
+
+            if (generatedEvent is not null)
+                generatedEventHistory.Add(generatedEvent.Name ?? "Evento sem nome");
+
+            // A IA altera apenas narrativa e escolhas.
+            // O Id continua sendo o do evento mecânico, então o C# controla os resultados.
+            await NextEventPhase(eventToShow);
         }
         else
         {
-            // Sem evento: vai direto para o descanso
             await ExecuteRestPhase();
         }
+    }
+
+    private void ShowEventGenerationScreen()
+    {
+        ClearScreen();
+
+        Panel frame = new Panel
+        {
+            Size = new Size(600, 240),
+            BackColor = ColorTranslator.FromHtml("#1a1a2e"),
+            Location = new Point(
+                (mainPanel.Width - 600) / 2,
+                (mainPanel.Height - 240) / 2),
+            Anchor = AnchorStyles.None
+        };
+
+        Label title = new Label
+        {
+            Text = "✦ UM NOVO ENCONTRO ✦",
+            Font = new Font("Segoe UI Semibold", 16, FontStyle.Bold),
+            ForeColor = ColorTranslator.FromHtml("#ff9800"),
+            Dock = DockStyle.Top,
+            Height = 52,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+
+        Label description = new Label
+        {
+            Text = "O mundo reage à sua jornada...",
+            Font = new Font("Segoe UI", 11, FontStyle.Italic),
+            ForeColor = ColorTranslator.FromHtml("#b8c1d1"),
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+
+        frame.Controls.Add(description);
+        frame.Controls.Add(title);
+        mainPanel.Controls.Add(frame);
+        frame.BringToFront();
     }
 
     /// <summary>
@@ -1904,12 +1968,12 @@ public class GameGUI : Form
         else
         {
             btnNext.Text = "IR PARA A LOJA 🛒";
-            btnNext.Click += (s, e) =>
+            btnNext.Click += async (s, e) =>
             {
                 market = _gameService.RollMarket(team, allAgents, currentLevel);
                 itemShop = RollItemShop(currentLevel);
                 rerollCount = 1;
-                CreateShopScreen().Wait();
+                await CreateShopScreen();
             };
         }
         frame.Controls.Add(btnNext);

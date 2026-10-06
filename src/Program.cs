@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RPGBattleMaker.Application.Interfaces;
 using RPGBattleMaker.Application.Services;
+using RPGBattleMaker.Infrastructure.AI;
 using RPGBattleMaker.Infrastructure.Database;
 using RPGBattleMaker.Infrastructure.Repositories;
 using RPGBattleMaker.Presentation.Forms;
@@ -27,11 +28,11 @@ namespace RPGBattleMaker
                     services.AddSingleton<IDatabaseInitializer, GameDatabaseInitializer>();
 
                     services.AddSingleton<IAgentRepository, AgentRepository>();
-                    services.AddSingleton<IEventRepository, EventRepository>();
 
                     services.AddSingleton<IAgentService, AgentService>();
                     services.AddSingleton<IGameService, GameService>();
                     services.AddSingleton<IEventService, EventService>();
+                    services.AddSingleton<ILocalEventGenerator, LocalEventGenerator>();
 
                     services.AddTransient<GameGUI>();
                 })
