@@ -138,6 +138,103 @@ public class GameGUI : Form
         };
     }
 
+    private static string GetRarityName(int rarity)
+    {
+        return rarity switch
+        {
+            1 => "COMUM",
+            2 => "INCOMUM",
+            3 => "RARO",
+            4 => "ÉPICO",
+            5 => "LENDÁRIO",
+            _ => "DESCONHECIDO"
+        };
+    }
+
+    private static void ApplyCardHover(Panel card, Color normalColor, Color hoverColor)
+    {
+        void SetHover(bool hovered)
+        {
+            card.BackColor = hovered ? hoverColor : normalColor;
+        }
+
+        void HandleEnter(object? sender, EventArgs e)
+        {
+            SetHover(true);
+        }
+
+        void HandleLeave(object? sender, EventArgs e)
+        {
+            Point cursorPosition = card.PointToClient(Cursor.Position);
+
+            if (!card.ClientRectangle.Contains(cursorPosition))
+                SetHover(false);
+        }
+
+        void Attach(Control control)
+        {
+            control.MouseEnter += HandleEnter;
+            control.MouseLeave += HandleLeave;
+
+            foreach (Control child in control.Controls)
+                Attach(child);
+        }
+
+        Attach(card);
+    }
+
+    private static void ApplyButtonHover(Button button, Color normalColor, Color hoverColor)
+    {
+        button.UseVisualStyleBackColor = false;
+        button.BackColor = normalColor;
+
+        button.MouseEnter += (_, _) =>
+        {
+            if (button.Enabled)
+                button.BackColor = hoverColor;
+        };
+
+        button.MouseLeave += (_, _) =>
+        {
+            if (button.Enabled)
+                button.BackColor = normalColor;
+        };
+    }
+
+    private static Panel CreateSynergyChip(string synergy)
+    {
+        FlowLayoutPanel chip = new()
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Height = 24,
+            Padding = new Padding(5, 2, 7, 2),
+            Margin = new Padding(0, 2, 4, 2),
+            BackColor = ColorTranslator.FromHtml("#3a3022")
+        };
+
+        chip.Controls.Add(new VectorIcon(
+            VectorIconKind.Sparkles,
+            ColorTranslator.FromHtml("#ffb74d"),
+            15)
+        {
+            Margin = new Padding(0, 1, 3, 0)
+        });
+
+        chip.Controls.Add(new Label
+        {
+            Text = synergy.ToUpperInvariant(),
+            Font = new Font("Segoe UI Semibold", 7.5f, FontStyle.Bold),
+            ForeColor = ColorTranslator.FromHtml("#ffb74d"),
+            AutoSize = true,
+            Margin = new Padding(0, 1, 0, 0)
+        });
+
+        return chip;
+    }
+
     private static Panel CreateStatCell(VectorIconKind iconKind, string text, Color textColor)
     {
         Panel cell = new()
@@ -390,52 +487,112 @@ public class GameGUI : Form
 
         Label infoLbl = new Label
         {
-            Text = $"ANDAR {currentLevel} / 5     •     {mode.ToUpper()}     •     {gold} OURO",
-            Font = new Font("Segoe UI Semibold", 12, FontStyle.Bold),
+            Text = $"ANDAR {currentLevel} / 5   •   {mode.ToUpper()}",
+            Font = new Font("Segoe UI Semibold", 11, FontStyle.Bold),
             ForeColor = ColorTranslator.FromHtml("#f3d58a"),
-            AutoSize = true,
-            Location = new Point(24, 25)
+            AutoSize = false,
+            Size = new Size(225, 44),
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0)
         };
-        topFrame.Controls.Add(infoLbl);
 
-        VectorIcon goldIcon = new(VectorIconKind.Coin, ColorTranslator.FromHtml("#f3d58a"), 22)
+        Panel goldBadge = new Panel
         {
-            Location = new Point(12, 25)
+            Size = new Size(94, 34),
+            BackColor = ColorTranslator.FromHtml("#252d3b"),
+            Margin = new Padding(8, 5, 0, 0),
+            Padding = new Padding(6, 0, 8, 0)
         };
-        topFrame.Controls.Add(goldIcon);
+
+        VectorIcon goldIcon = new(VectorIconKind.Coin, ColorTranslator.FromHtml("#f3d58a"), 18)
+        {
+            Location = new Point(6, 8)
+        };
+        goldBadge.Controls.Add(goldIcon);
+
+        Label goldLbl = new Label
+        {
+            Text = $"{gold} G",
+            Font = new Font("Segoe UI Semibold", 10, FontStyle.Bold),
+            ForeColor = ColorTranslator.FromHtml("#f3d58a"),
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleRight,
+            Padding = new Padding(0, 0, 0, 0)
+        };
+        goldBadge.Controls.Add(goldLbl);
+
+        FlowLayoutPanel headerInfo = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Left,
+            Width = 340,
+            Height = 54,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Padding = new Padding(18, 7, 0, 0),
+            BackColor = Color.Transparent
+        };
+        headerInfo.Controls.Add(infoLbl);
+        headerInfo.Controls.Add(goldBadge);
+        topFrame.Controls.Add(headerInfo);
 
         Button btnMission = new Button
         {
-            Text = "IR PARA MISSÃO",
-            Font = new Font("Arial", 10, FontStyle.Bold),
+            Text = "MISSÃO",
+            Image = VectorIcon.CreateBitmap(VectorIconKind.Map, Color.White, 18, ColorTranslator.FromHtml("#a84843")),
+            ImageAlign = ContentAlignment.MiddleCenter,
+            TextAlign = ContentAlignment.MiddleCenter,
+            TextImageRelation = TextImageRelation.ImageBeforeText,
+            Font = new Font("Segoe UI Semibold", 9, FontStyle.Bold),
             BackColor = ColorTranslator.FromHtml("#a84843"),
             ForeColor = Color.White,
-            Size = new Size(148, 40),
+            Size = new Size(132, 40),
             FlatStyle = FlatStyle.Flat
         };
         btnMission.Click += async (s, e) => await CheckGoToMission();
+        ApplyButtonHover(btnMission, ColorTranslator.FromHtml("#a84843"), ColorTranslator.FromHtml("#c15b55"));
+
+        bool canReroll = gold >= rerollCount && (team.Count > 0 || gold > rerollCount);
 
         Button btnReroll = new Button
         {
             Text = $"REROLL  •  {rerollCount} G",
-            Font = new Font("Arial", 10, FontStyle.Regular),
+            Image = VectorIcon.CreateBitmap(
+                VectorIconKind.Dice,
+                Color.White,
+                18,
+                ColorTranslator.FromHtml("#795548")),
+            ImageAlign = ContentAlignment.MiddleCenter,
+            TextAlign = ContentAlignment.MiddleCenter,
+            TextImageRelation = TextImageRelation.ImageBeforeText,
+            Font = new Font("Segoe UI Semibold", 9, FontStyle.Bold),
             BackColor = ColorTranslator.FromHtml("#795548"),
             ForeColor = Color.White,
             Size = new Size(164, 40),
-            FlatStyle = FlatStyle.Flat
+            FlatStyle = FlatStyle.Flat,
+            Enabled = canReroll
         };
         btnReroll.Click += async (s, e) => await RerollShop();
+        ApplyButtonHover(btnReroll, ColorTranslator.FromHtml("#795548"), ColorTranslator.FromHtml("#956d5a"));
 
         Button btnRestart = new Button
         {
             Text = "RECOMEÇAR",
-            Font = new Font("Arial", 10, FontStyle.Regular),
+            Image = VectorIcon.CreateBitmap(
+                VectorIconKind.Refresh,
+                Color.White,
+                17,
+                ColorTranslator.FromHtml("#4287f5")),
+            ImageAlign = ContentAlignment.MiddleCenter,
+            TextAlign = ContentAlignment.MiddleCenter,
+            TextImageRelation = TextImageRelation.ImageBeforeText,
+            Font = new Font("Segoe UI Semibold", 9, FontStyle.Bold),
             BackColor = ColorTranslator.FromHtml("#4287f5"),
             ForeColor = Color.White,
             Size = new Size(138, 40),
             FlatStyle = FlatStyle.Flat
         };
         btnRestart.Click += (s, e) => RestartEntireGame();
+        ApplyButtonHover(btnRestart, ColorTranslator.FromHtml("#4287f5"), ColorTranslator.FromHtml("#5a99ff"));
 
         FlowLayoutPanel headerActions = new FlowLayoutPanel
         {
@@ -451,10 +608,6 @@ public class GameGUI : Form
         headerActions.Controls.Add(btnReroll);
         headerActions.Controls.Add(btnRestart);
         topFrame.Controls.Add(headerActions);
-        infoLbl.Dock = DockStyle.Fill;
-        infoLbl.AutoSize = false;
-        infoLbl.TextAlign = ContentAlignment.MiddleLeft;
-        infoLbl.Padding = new Padding(38, 0, 0, 0);
 
         // Conteineres do Mercado e Time
         TableLayoutPanel mainLayout = new TableLayoutPanel
@@ -471,13 +624,13 @@ public class GameGUI : Form
         mainLayout.BringToFront();
 
         // Lado Esquerdo: Mercado
-        GroupBox marketFrame = new GroupBox { Text = " ✦ RECRUTAMENTO ", Font = new Font("Arial", 11, FontStyle.Bold), ForeColor = Color.White, Dock = DockStyle.Fill, Padding = new Padding(8) };
+        GroupBox marketFrame = new GroupBox { Text = " MERCADO DE HERÓIS ", Font = new Font("Segoe UI Semibold", 10.5f, FontStyle.Bold), ForeColor = ColorTranslator.FromHtml("#d7b56d"), Dock = DockStyle.Fill, Padding = new Padding(8) };
         mainLayout.Controls.Add(marketFrame, 0, 0);
 
         GroupBox itemFrame = new GroupBox
         {
-            Text = " ✦ RELÍQUIAS ",
-            Font = new Font("Arial", 11, FontStyle.Bold),
+            Text = " RELÍQUIAS ",
+            Font = new Font("Segoe UI Semibold", 10.5f, FontStyle.Bold),
             ForeColor = ColorTranslator.FromHtml("#ff9800"),
             Dock = DockStyle.Fill
         };
@@ -518,11 +671,13 @@ public class GameGUI : Form
             int itemIdx = i;
             Item shopItem = itemShop[i];
 
-            Panel itemCard = new Panel
+            RarityCard itemCard = new RarityCard
             {
                 Size = new Size(itemCardWidth, 122),
                 BackColor = ColorTranslator.FromHtml("#202735"),
-                Margin = Padding.Empty
+                BorderThickness = 2,
+                Margin = Padding.Empty,
+                Padding = new Padding(2)
             };
             itemCards.Add(itemCard);
             itemList.Controls.Add(itemCard);
@@ -550,6 +705,8 @@ public class GameGUI : Form
             {
                 Color rarityColor = rarityColors.ContainsKey(shopItem.Rarity) ? rarityColors[shopItem.Rarity] : Color.White;
 
+                itemCard.BorderColor = rarityColor;
+
                 Panel itemHeader = new Panel
                 {
                     Location = new Point(8, 4),
@@ -563,17 +720,34 @@ public class GameGUI : Form
                 };
                 itemHeader.Controls.Add(itemIcon);
 
+                const int rarityBadgeWidth = 72;
+
                 Label nameLbl = new Label
                 {
                     Text = shopItem.Name,
                     Font = new Font("Segoe UI Semibold", 9.5f, FontStyle.Bold),
                     ForeColor = rarityColor,
                     Location = new Point(34, 0),
-                    Size = new Size(itemHeader.Width - 34, 34),
+                    Size = new Size(Math.Max(80, itemHeader.Width - 34 - rarityBadgeWidth - 14), 34),
                     AutoSize = false,
+                    AutoEllipsis = true,
                     TextAlign = ContentAlignment.MiddleLeft
                 };
                 itemHeader.Controls.Add(nameLbl);
+
+                Label rarityLbl = new Label
+                {
+                    Text = GetRarityName(shopItem.Rarity),
+                    Font = new Font("Segoe UI Semibold", 7f, FontStyle.Bold),
+                    ForeColor = Color.White,
+                    BackColor = Color.FromArgb(55, rarityColor),
+                    Size = new Size(rarityBadgeWidth, 18),
+                    Location = new Point(itemHeader.Width - rarityBadgeWidth - 8, 8),
+                    AutoSize = false,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Anchor = AnchorStyles.Top | AnchorStyles.Right
+                };
+                itemHeader.Controls.Add(rarityLbl);
 
                 itemCard.Controls.Add(itemHeader);
 
@@ -588,11 +762,13 @@ public class GameGUI : Form
                 };
                 itemCard.Controls.Add(descLbl);
 
-                Button btnBuyItem = new Button
+                CenteredIconButton btnBuyItem = new CenteredIconButton
                 {
                     Text = $"COMPRAR  •  {shopItem.Cost} G",
-                    Image = VectorIcon.CreateBitmap(VectorIconKind.Coin, Color.White, 18, ColorTranslator.FromHtml("#795548")),
-                    ImageAlign = ContentAlignment.MiddleLeft,
+                    IconKind = VectorIconKind.Coin,
+                    IconColor = Color.White,
+                    IconSize = 18,
+                    IconTextGap = 6,
                     BackColor = ColorTranslator.FromHtml("#795548"),
                     ForeColor = Color.White,
                     Font = new Font("Segoe UI Semibold", 8.5f, FontStyle.Bold),
@@ -601,7 +777,13 @@ public class GameGUI : Form
                     FlatStyle = FlatStyle.Flat
                 };
                 btnBuyItem.Click += (s, e) => BuyItem(itemIdx).Wait();
+                ApplyButtonHover(btnBuyItem, ColorTranslator.FromHtml("#795548"), ColorTranslator.FromHtml("#956d5a"));
                 itemCard.Controls.Add(btnBuyItem);
+
+                ApplyCardHover(
+                    itemCard,
+                    ColorTranslator.FromHtml("#202735"),
+                    ColorTranslator.FromHtml("#293448"));
             }
         }
 
@@ -642,11 +824,18 @@ public class GameGUI : Form
 
         ResizeItemCards();
 
-        TableLayoutPanel marketGrid = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 2, Padding = new Padding(10) };
+        TableLayoutPanel marketGrid = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            RowCount = 2,
+            ColumnCount = 2,
+            Padding = new Padding(10),
+            AutoSize = false
+        };
         marketGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
         marketGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
-        marketGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
-        marketGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
+        marketGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 280));
+        marketGrid.RowStyles.Add(new RowStyle(SizeType.Absolute, 280));
         marketFrame.Controls.Add(marketGrid);
 
         for (int i = 0; i < market.Count; i++)
@@ -654,7 +843,14 @@ public class GameGUI : Form
             int index = i;
             Agent agent = market[i];
 
-            Panel card = new Panel { Dock = DockStyle.Fill, BackColor = ColorTranslator.FromHtml("#202735"), Margin = new Padding(7), Padding = new Padding(4) };
+            RarityCard card = new RarityCard
+            {
+                Dock = DockStyle.Fill,
+                BackColor = ColorTranslator.FromHtml("#202735"),
+                BorderThickness = 2,
+                Margin = new Padding(7),
+                Padding = new Padding(4)
+            };
             marketGrid.Controls.Add(card, i % 2, i / 2);
 
             if (agent == null)
@@ -708,24 +904,44 @@ public class GameGUI : Form
             {
                 Color rarityColor = rarityColors.ContainsKey(agent.Rarity) ? rarityColors[agent.Rarity] : Color.White;
 
+                card.BorderColor = rarityColor;
+
                 Label titleLbl = new Label
                 {
                     Text = $"{agent.Name}\n({AgentHelper.MappingTypes(agent.Type)})",
-                    Font = new Font("Arial", 10, FontStyle.Bold),
+                    Font = new Font("Segoe UI Semibold", 9.5f, FontStyle.Bold),
                     ForeColor = rarityColor,
                     TextAlign = ContentAlignment.TopCenter,
-                    Dock = DockStyle.Top,
-                    Height = 42
+                    Location = new Point(0, 5),
+                    Width = card.ClientSize.Width,
+                    Height = 36,
+                    Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
                 };
                 card.Controls.Add(titleLbl);
 
+                Label rarityLbl = new Label
+                {
+                    Text = GetRarityName(agent.Rarity),
+                    Font = new Font("Segoe UI Semibold", 7.5f, FontStyle.Bold),
+                    ForeColor = Color.White,
+                    BackColor = Color.FromArgb(55, rarityColor),
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    Size = new Size(84, 20),
+                    Location = new Point(0, 43),
+                    AutoSize = false
+                };
+                void CenterRarity(object? sender, EventArgs e) => rarityLbl.Left = Math.Max(0, (card.ClientSize.Width - rarityLbl.Width) / 2);
+                card.SizeChanged += CenterRarity;
+                CenterRarity(card, EventArgs.Empty);
+                card.Controls.Add(rarityLbl);
+
                 PictureBox pb = new PictureBox
                 {
-                    Image = await _agentService.GetAgentImage(agent, new Size(90, 90)),
-                    Size = new Size(90, 90),
+                    Image = await _agentService.GetAgentImage(agent, new Size(80, 80)),
+                    Size = new Size(80, 80),
                     SizeMode = PictureBoxSizeMode.CenterImage,
                     Left = 0,
-                    Top = 48,
+                    Top = 68,
                     Anchor = AnchorStyles.Top
                 };
                 void CenterPortrait(object? sender, EventArgs e) => pb.Left = Math.Max(0, (card.ClientSize.Width - pb.Width) / 2);
@@ -739,17 +955,17 @@ public class GameGUI : Form
                     Font = new Font("Arial", 9),
                     ForeColor = ColorTranslator.FromHtml("#bbbbbb"),
                     TextAlign = ContentAlignment.MiddleCenter,
-                    Location = new Point(0, 142),
+                    Location = new Point(0, 148),
                     Width = card.ClientSize.Width,
-                    Height = 55,
+                    Height = 50,
                     Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
                 };
                 statsLbl.Visible = false;
                 card.Controls.Add(statsLbl);
 
                 TableLayoutPanel statsGrid = CreateMarketStats(agent, mode == "Difícil");
-                statsGrid.Location = new Point(14, 140);
-                statsGrid.Size = new Size(Math.Max(180, card.ClientSize.Width - 28), 60);
+                statsGrid.Location = new Point(14, 148);
+                statsGrid.Size = new Size(Math.Max(180, card.ClientSize.Width - 28), 50);
                 statsGrid.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
                 card.Controls.Add(statsGrid);
 
@@ -761,9 +977,9 @@ public class GameGUI : Form
                     Font = new Font("Arial", 9, FontStyle.Italic),
                     ForeColor = ColorTranslator.FromHtml("#ff9800"),
                     TextAlign = ContentAlignment.MiddleCenter,
-                    Location = new Point(0, 202),
+                    Location = new Point(0, 198),
                     Width = card.ClientSize.Width,
-                    Height = 30,
+                    Height = 28,
                     Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
                 };
                 void ResizeStats(object? sender, EventArgs e)
@@ -776,11 +992,13 @@ public class GameGUI : Form
                 ResizeStats(card, EventArgs.Empty);
                 card.Controls.Add(synergyLbl);
 
-                Button btnBuy = new Button
+                CenteredIconButton btnBuy = new CenteredIconButton
                 {
                     Text = $"COMPRAR  •  {agent.Rarity} G",
-                    Image = VectorIcon.CreateBitmap(VectorIconKind.Coin, Color.White, 18, ColorTranslator.FromHtml("#4caf50")),
-                    ImageAlign = ContentAlignment.MiddleLeft,
+                    IconKind = VectorIconKind.Coin,
+                    IconColor = Color.White,
+                    IconSize = 18,
+                    IconTextGap = 6,
                     BackColor = ColorTranslator.FromHtml("#4caf50"),
                     ForeColor = Color.White,
                     Font = new Font("Segoe UI Semibold", 8.5f, FontStyle.Bold),
@@ -789,12 +1007,18 @@ public class GameGUI : Form
                     FlatStyle = FlatStyle.Flat
                 };
                 btnBuy.Click += (s, e) => BuyAgent(index).Wait();
+                ApplyButtonHover(btnBuy, ColorTranslator.FromHtml("#4caf50"), ColorTranslator.FromHtml("#62c76b"));
                 card.Controls.Add(btnBuy);
+
+                ApplyCardHover(
+                    card,
+                    ColorTranslator.FromHtml("#202735"),
+                    ColorTranslator.FromHtml("#293448"));
             }
         }
 
         // Lado Direito: Sua Equipe
-        GroupBox teamFrame = new GroupBox { Text = $" ✦ SEU ESQUADRÃO  {team.Count}/5 ", Font = new Font("Arial", 11, FontStyle.Bold), ForeColor = Color.White, Dock = DockStyle.Fill };
+        GroupBox teamFrame = new GroupBox { Text = $" SEU ESQUADRÃO  {team.Count}/5 ", Font = new Font("Segoe UI Semibold", 10.5f, FontStyle.Bold), ForeColor = ColorTranslator.FromHtml("#d7b56d"), Dock = DockStyle.Fill };
         mainLayout.Controls.Add(teamFrame, 2, 0);
 
         FlowLayoutPanel teamList = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, AutoScroll = true, Padding = new Padding(10) };
@@ -811,15 +1035,32 @@ public class GameGUI : Form
             int index = i;
             Agent agent = team[i];
 
-            Panel card = new Panel { Size = new Size(Math.Max(300, teamList.ClientSize.Width - 24), 88), BackColor = ColorTranslator.FromHtml("#202735"), Margin = new Padding(0, 6, 0, 6) };
+            Color rarityColor = rarityColors.ContainsKey(agent.Rarity) ? rarityColors[agent.Rarity] : Color.White;
+            Color teamCardBackColor = Color.FromArgb(
+                (32 + rarityColor.R) / 2,
+                (39 + rarityColor.G) / 2,
+                (53 + rarityColor.B) / 2);
+
+            Panel card = new Panel
+            {
+                Size = new Size(Math.Max(300, teamList.ClientSize.Width - 24), 88),
+                BackColor = teamCardBackColor,
+                Margin = new Padding(0, 6, 0, 6)
+            };
             teamList.Controls.Add(card);
+
+            card.Controls.Add(new Panel
+            {
+                Dock = DockStyle.Left,
+                Width = 4,
+                BackColor = rarityColor
+            });
 
             teamList.SizeChanged += (_, _) => card.Width = Math.Max(280, teamList.ClientSize.Width - 24);
 
             PictureBox pb = new PictureBox { Image = await _agentService.GetAgentImage(agent, new Size(45, 45)), Size = new Size(45, 45), Location = new Point(5, 7) };
             card.Controls.Add(pb);
 
-            Color rarityColor = rarityColors.ContainsKey(agent.Rarity) ? rarityColors[agent.Rarity] : Color.White;
             Label titleLbl = new Label { Text = $"{agent.Name} ({AgentHelper.MappingTypes(agent.Type)})", Font = new Font("Arial", 10, FontStyle.Bold), ForeColor = rarityColor, Location = new Point(55, 5), Size = new Size(Math.Max(100, card.Width - 130), 22), AutoEllipsis = true, Anchor = AnchorStyles.Top | AnchorStyles.Left };
             card.Controls.Add(titleLbl);
 
@@ -868,6 +1109,7 @@ public class GameGUI : Form
 
             card.SizeChanged += ResizeTeamCard;
             ResizeTeamCard(card, EventArgs.Empty);
+            ApplyButtonHover(btnSell, ColorTranslator.FromHtml("#f44336"), ColorTranslator.FromHtml("#ef625d"));
         }
 
         // Exibe as sinergias que estão ativas no esquadrão.
@@ -877,42 +1119,30 @@ public class GameGUI : Form
         {
             Label synergyTitle = new Label
             {
-                Text = "── Sinergias Ativas ──",
-                Font = new Font("Segoe UI", 8, FontStyle.Italic),
+                Text = "SINERGIAS ATIVAS",
+                Font = new Font("Segoe UI Semibold", 8, FontStyle.Bold),
                 ForeColor = ColorTranslator.FromHtml("#d7b56d"),
                 AutoSize = true,
-                Margin = new Padding(0, 8, 0, 2)
+                Margin = new Padding(0, 8, 0, 3)
             };
             teamList.Controls.Add(synergyTitle);
 
-            foreach (string synergy in activeSynergies)
+            FlowLayoutPanel synergyList = new FlowLayoutPanel
             {
-                FlowLayoutPanel synergyRow = new FlowLayoutPanel
-                {
-                    AutoSize = true,
-                    WrapContents = false,
-                    FlowDirection = FlowDirection.LeftToRight,
-                    Margin = new Padding(2, 1, 0, 1),
-                    Padding = Padding.Empty,
-                    BackColor = Color.Transparent
-                };
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = true,
+                Margin = new Padding(0, 0, 0, 2),
+                Padding = Padding.Empty,
+                BackColor = Color.Transparent,
+                MaximumSize = new Size(Math.Max(200, teamList.ClientSize.Width - 20), 0)
+            };
 
-                synergyRow.Controls.Add(new VectorIcon(
-                    VectorIconKind.Sparkles,
-                    ColorTranslator.FromHtml("#ff9800"),
-                    16));
+            foreach (string synergy in activeSynergies)
+                synergyList.Controls.Add(CreateSynergyChip(synergy));
 
-                synergyRow.Controls.Add(new Label
-                {
-                    Text = synergy,
-                    Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                    ForeColor = ColorTranslator.FromHtml("#ff9800"),
-                    AutoSize = true,
-                    Margin = new Padding(2, 1, 0, 0)
-                });
-
-                teamList.Controls.Add(synergyRow);
-            }
+            teamList.Controls.Add(synergyList);
         }
     }
 

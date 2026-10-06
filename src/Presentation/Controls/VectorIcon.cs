@@ -5,7 +5,7 @@ namespace RPGBattleMaker.Presentation.Controls;
 public enum VectorIconKind
 {
     Coin, Sword, Shield, Target, Heart, Dice, Recruit, Relic, Team, Check,
-    Potion, Armor, Axe, Tome, Map, Star, Dragon, Eye, Sparkles, Question, Skull, Damage
+    Potion, Armor, Axe, Tome, Map, Star, Dragon, Eye, Sparkles, Question, Skull, Damage, Refresh
 }
 
 public sealed class VectorIcon : Control
@@ -233,6 +233,15 @@ public sealed class VectorIcon : Control
                     new PointF(12, 21), new PointF(10, 15), new PointF(4, 17),
                     new PointF(8, 12), new PointF(4, 7), new PointF(10, 9)
                 });
+                break;
+
+            case VectorIconKind.Refresh:
+                e.Graphics.DrawArc(pen, 5, 5, 14, 14, 35, 275);
+                e.Graphics.DrawLine(pen, 18, 5, 18, 10);
+                e.Graphics.DrawLine(pen, 18, 5, 13, 5);
+                e.Graphics.DrawArc(pen, 5, 5, 14, 14, 215, 145);
+                e.Graphics.DrawLine(pen, 6, 19, 6, 14);
+                e.Graphics.DrawLine(pen, 6, 19, 11, 19);
                 break;
         }
 
