@@ -37,6 +37,9 @@ public class GameGUI : Form
     private int rerollCount = 1;
 
     private readonly List<string> battleStoryHistory = new();
+    private readonly List<string> eventHistory = new();
+    private Task<BattleStory?>? initialBattleStoryTask;
+    private BattleStory? lastBattleConclusion;
 
     // Estado da Batalha/Missão
     private string currentTheme = Agent.Ataque;
@@ -117,6 +120,9 @@ public class GameGUI : Form
         roundBonuses = new Dictionary<string, int> { { Agent.Ataque, 0 }, { Agent.Defesa, 0 }, { "Escudo", 0 }, { "DC_Reduction", 0 } };
         market.Clear();
         battleStoryHistory.Clear();
+        eventHistory.Clear();
+        initialBattleStoryTask = null;
+        lastBattleConclusion = null;
 
         #region Populate Data from DB
         _databaseInitializer.InitializeDatabase().Wait();
@@ -477,9 +483,22 @@ public class GameGUI : Form
         stage.Controls.Add(footer, 0, 2);
     }
 
+    private void StartInitialBattleStoryGeneration()
+    {
+        // A abertura de cada nível continua a narrativa acumulada da run.
+        // Copiamos o histórico no momento da criação da Task para que o prompt
+        // não mude enquanto a geração estiver acontecendo em background.
+        initialBattleStoryTask = _battleNarrator.GenerateInitialAsync(
+            currentLevel,
+            battleStoryHistory.ToList());
+    }
+
     private async Task StartGame(string chosenMode)
     {
         mode = chosenMode;
+
+        StartInitialBattleStoryGeneration();
+
         market = _gameService.RollMarket(team, allAgents, currentLevel);
         itemShop = RollItemShop(currentLevel);
         await CreateShopScreen();
@@ -1231,7 +1250,7 @@ public class GameGUI : Form
     private async Task StartMissionPhase()
     {
         ClearScreen();
-        battleStoryHistory.Clear();
+        lastBattleConclusion = null;
 
         string[] themes = { Agent.Ataque, Agent.Defesa, Agent.Pericia };
         currentTheme = themes[random.Next(themes.Length)];
@@ -1435,6 +1454,26 @@ public class GameGUI : Form
             await ApplyGuiDamage(rollingHero, currentLevel);
         }
 
+        bool missionEnded =
+            falhas >= 3 ||
+            round >= 5 ||
+            team.All(a => a.CurrentLife <= 0);
+
+        bool missionSuccess = missionEnded &&
+            team.Any(a => a.CurrentLife > 0) &&
+            falhas < 3;
+
+        if (missionEnded)
+        {
+            outcome = missionSuccess
+                ? "VITÓRIA DO NÍVEL"
+                : "DERROTA DO NÍVEL";
+
+            outcomeDetail = missionSuccess
+                ? $"O nível terminou com {sucessos} sucesso(s) e {falhas} falha(s). Esta é a conclusão do arco atual. A party venceu o confronto e deve ser narrada encerrando o capítulo em triunfo."
+                : $"O nível terminou com {sucessos} sucesso(s) e {falhas} falha(s). Esta é a conclusão do arco atual. A party foi derrotada e a narrativa deve encerrar sua jornada em fracasso.";
+        }
+
         if (!rollingHero.Fatigue.ContainsKey(currentTheme))
             rollingHero.Fatigue[currentTheme] = 0;
 
@@ -1442,6 +1481,8 @@ public class GameGUI : Form
 
         await GenerateBattleStoryAsync(
             isInitial: false,
+            isFinal: missionEnded,
+            finalSuccess: missionSuccess,
             hero: rollingHero,
             round: round,
             d20: d20,
@@ -1466,6 +1507,8 @@ public class GameGUI : Form
 
     private async Task GenerateBattleStoryAsync(
         bool isInitial,
+        bool isFinal = false,
+        bool finalSuccess = false,
         Agent? hero = null,
         int round = 1,
         int d20 = 0,
@@ -1477,7 +1520,9 @@ public class GameGUI : Form
         if (storyHero is null)
             return;
 
-        if (!isInitial)
+        if (isFinal)
+            await AppendLog("\n✦ O confronto chega ao desfecho... ✦", Color.Orange);
+        else if (!isInitial)
             await AppendLog("\n✦ A batalha continua... a história se atualiza. ✦", Color.Orange);
         else
             await AppendLog("\n✦ A batalha começa... ✦", Color.Orange);
@@ -1499,7 +1544,44 @@ public class GameGUI : Form
             PreviousStories = battleStoryHistory.ToList()
         };
 
-        BattleStory? story = await _battleNarrator.GenerateAsync(context);
+        BattleStory? story;
+
+        if (isInitial && initialBattleStoryTask is not null)
+        {
+            story = await initialBattleStoryTask;
+            initialBattleStoryTask = null;
+        }
+        else if (isFinal)
+        {
+            string currentRoundStory = $"""
+                Rodada final {round}/5:
+                {storyHero.Name} teve o resultado "{outcome}".
+                {outcomeDetail}
+                D20: {d20}. Total: {total}. DC: {dc}.
+                Resultado consolidado do nível: {(finalSuccess ? "VITÓRIA DA PARTY" : "DERROTA DA PARTY")}.
+                Placar final: {sucessos} sucesso(s) e {falhas} falha(s).
+                """;
+
+            IReadOnlyList<string> conclusionHistory = battleStoryHistory
+                .Concat(new[] { currentRoundStory })
+                .ToList();
+
+            story = await _battleNarrator.GenerateConclusionAsync(
+                currentLevel,
+                finalSuccess,
+                sucessos,
+                falhas,
+                team.ToList(),
+                purchasedItems.ToList(),
+                conclusionHistory,
+                eventHistory.ToList());
+
+            lastBattleConclusion = story;
+        }
+        else
+        {
+            story = await _battleNarrator.GenerateAsync(context);
+        }
 
         if (story is null)
         {
@@ -1560,50 +1642,205 @@ public class GameGUI : Form
 
         foreach (var a in team) a.ResetFatigue();
 
-        Panel frame = new Panel { Size = new Size(500, 400), BackColor = Color.Transparent };
-        frame.Location = new Point((mainPanel.Width - frame.Width) / 2, (mainPanel.Height - frame.Height) / 2);
+        bool aliveHeroes = team.Any(a => a.CurrentLife > 0);
+        bool missionSuccess = aliveHeroes && falhas < 3;
+
+        Panel loadingFrame = new Panel
+        {
+            Size = new Size(620, 220),
+            BackColor = ColorTranslator.FromHtml("#1a1a2e"),
+            Location = new Point(
+                (mainPanel.Width - 620) / 2,
+                (mainPanel.Height - 220) / 2),
+            Anchor = AnchorStyles.None
+        };
+
+        Label loadingTitle = new Label
+        {
+            Text = missionSuccess
+                ? "✦ CONCLUSÃO DA BATALHA ✦"
+                : "✦ DESFECHO DA JORNADA ✦",
+            Font = new Font("Segoe UI Semibold", 17, FontStyle.Bold),
+            ForeColor = missionSuccess
+                ? ColorTranslator.FromHtml("#4caf50")
+                : ColorTranslator.FromHtml("#f44336"),
+            Dock = DockStyle.Top,
+            Height = 60,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+
+        Label loadingDescription = new Label
+        {
+            Text = missionSuccess
+                ? "A batalha terminou. O narrador está encerrando este capítulo..."
+                : "A batalha chegou ao limite. O destino da party está sendo decidido...",
+            Font = new Font("Segoe UI", 11, FontStyle.Italic),
+            ForeColor = ColorTranslator.FromHtml("#b8c1d1"),
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+
+        loadingFrame.Controls.Add(loadingDescription);
+        loadingFrame.Controls.Add(loadingTitle);
+        mainPanel.Controls.Add(loadingFrame);
+        loadingFrame.BringToFront();
+
+        // Permite que a tela de carregamento seja desenhada antes da inferência.
+        await Task.Yield();
+
+        BattleStory? conclusion = await _battleNarrator.GenerateConclusionAsync(
+            currentLevel,
+            missionSuccess,
+            sucessos,
+            falhas,
+            team.ToList(),
+            purchasedItems.ToList(),
+            battleStoryHistory.ToList(),
+            eventHistory.ToList());
+
+        if (conclusion is null)
+        {
+            conclusion = missionSuccess
+                ? new BattleStory(
+                    $"Vitória no Nível {currentLevel}",
+                    "A party supera o confronto e encerra este capítulo com uma vitória clara. As marcas da batalha permanecem, mas os heróis seguem adiante.")
+                : new BattleStory(
+                    "A Queda da Party",
+                    "As forças da party chegam ao fim. Derrotados pelas consequências do confronto, os heróis não conseguem continuar a jornada.");
+        }
+
+        battleStoryHistory.Add(
+            $"{conclusion.Title}: {conclusion.Narrative}");
+
+        ClearScreen();
+
+        Panel frame = new Panel
+        {
+            Size = new Size(680, 590),
+            BackColor = ColorTranslator.FromHtml("#10131b"),
+            Padding = new Padding(22)
+        };
+        frame.Location = new Point(
+            (mainPanel.Width - frame.Width) / 2,
+            (mainPanel.Height - frame.Height) / 2);
         frame.Anchor = AnchorStyles.None;
         mainPanel.Controls.Add(frame);
 
         Label lblTitle = new Label
         {
             Text = $"RESULTADO FINAL: {sucessos} SUCESSOS | {falhas} FALHAS",
-            Font = new Font("Arial", 14, FontStyle.Bold),
+            Font = new Font("Segoe UI Semibold", 14, FontStyle.Bold),
             ForeColor = Color.White,
-            Size = new Size(500, 40),
+            Size = new Size(636, 40),
             TextAlign = ContentAlignment.MiddleCenter,
-            Top = 20
+            Top = 8
         };
         frame.Controls.Add(lblTitle);
 
-        var aliveHeroes = team.Any(a => a.CurrentLife > 0);
-
-        if (!aliveHeroes || falhas >= 3)
+        Label lblStoryTitle = new Label
         {
-            string msgText = !aliveHeroes ? "🔴 GAME OVER!\nSua equipe inteira está morta!" : "🔴 GAME OVER!\nSua equipe acumulou 3 ou mais falhas e não conseguiu completar o andar.";
-            Label lblRes = new Label { Text = msgText, Font = new Font("Arial", 12, FontStyle.Bold), ForeColor = ColorTranslator.FromHtml("#f44336"), Size = new Size(500, 60), TextAlign = ContentAlignment.MiddleCenter, Top = 100 };
+            Text = conclusion.Title,
+            Font = new Font("Segoe UI Semibold", 18, FontStyle.Bold),
+            ForeColor = missionSuccess
+                ? ColorTranslator.FromHtml("#4caf50")
+                : ColorTranslator.FromHtml("#f44336"),
+            Size = new Size(636, 50),
+            TextAlign = ContentAlignment.MiddleCenter,
+            Top = 58
+        };
+        frame.Controls.Add(lblStoryTitle);
+
+        RichTextBox narrativeBox = new RichTextBox
+        {
+            ReadOnly = true,
+            BorderStyle = BorderStyle.None,
+            BackColor = ColorTranslator.FromHtml("#0d1117"),
+            ForeColor = ColorTranslator.FromHtml("#e0e0e0"),
+            Font = new Font("Segoe UI", 11),
+            Location = new Point(42, 115),
+            Size = new Size(596, 220),
+            ScrollBars = RichTextBoxScrollBars.Vertical,
+            Text = conclusion.Narrative
+        };
+        frame.Controls.Add(narrativeBox);
+
+        if (!missionSuccess)
+        {
+            string msgText = !aliveHeroes
+                ? "🔴 GAME OVER!\nSua equipe inteira está morta!"
+                : "🔴 GAME OVER!\nSua equipe acumulou 3 ou mais falhas e não conseguiu completar o andar.";
+
+            Label lblRes = new Label
+            {
+                Text = msgText,
+                Font = new Font("Arial", 12, FontStyle.Bold),
+                ForeColor = ColorTranslator.FromHtml("#f44336"),
+                Size = new Size(636, 60),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Top = 350
+            };
             frame.Controls.Add(lblRes);
 
-            Button btnRestart = new Button { Text = "REINICIAR JOGO", Font = new Font("Arial", 11, FontStyle.Bold), BackColor = ColorTranslator.FromHtml("#f44336"), ForeColor = Color.White, Size = new Size(200, 45), Left = 150, Top = 200, FlatStyle = FlatStyle.Flat };
+            Button btnRestart = new Button
+            {
+                Text = "REINICIAR JOGO",
+                Font = new Font("Arial", 11, FontStyle.Bold),
+                BackColor = ColorTranslator.FromHtml("#f44336"),
+                ForeColor = Color.White,
+                Size = new Size(200, 45),
+                Left = 240,
+                Top = 440,
+                FlatStyle = FlatStyle.Flat
+            };
             btnRestart.Click += (s, e) => RestartEntireGame();
             frame.Controls.Add(btnRestart);
         }
-
         else
         {
             string txt;
             int g;
-            if (sucessos == 3) { txt = "🟡 VITÓRIA PÍRRICA! Vocês avançaram no limite."; g = 2; }
-            else if (sucessos == 4) { txt = "🔵 VITÓRIA CONFIANTE! Uma excelente exibição tática."; g = 5; }
-            else { txt = "🟢 VITÓRIA ABSOLUTA! Perfeito e lendário!"; g = 8; }
+
+            if (sucessos == 3)
+            {
+                txt = "🟡 VITÓRIA PÍRRICA! Vocês avançaram no limite.";
+                g = 2;
+            }
+            else if (sucessos == 4)
+            {
+                txt = "🔵 VITÓRIA CONFIANTE! Uma excelente exibição tática.";
+                g = 5;
+            }
+            else
+            {
+                txt = "🟢 VITÓRIA ABSOLUTA! Perfeito e lendário!";
+                g = 8;
+            }
 
             gold += g;
             extraDc = 0;
 
-            Label lblRes = new Label { Text = $"{txt}\nRecompensa da Fase: +{g}g", Font = new Font("Arial", 12, FontStyle.Bold), ForeColor = ColorTranslator.FromHtml("#4caf50"), Size = new Size(500, 60), TextAlign = ContentAlignment.MiddleCenter, Top = 100 };
+            Label lblRes = new Label
+            {
+                Text = $"{txt}\nRecompensa da Fase: +{g}g",
+                Font = new Font("Arial", 12, FontStyle.Bold),
+                ForeColor = ColorTranslator.FromHtml("#4caf50"),
+                Size = new Size(636, 60),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Top = 350
+            };
             frame.Controls.Add(lblRes);
 
-            Button btnContinue = new Button { Text = "AVANÇAR PARA DESCANSO", Font = new Font("Arial", 11, FontStyle.Bold), BackColor = ColorTranslator.FromHtml("#4caf50"), ForeColor = Color.White, Size = new Size(220, 45), Left = 140, Top = 200, FlatStyle = FlatStyle.Flat };
+            Button btnContinue = new Button
+            {
+                Text = "AVANÇAR PARA EVENTO",
+                Font = new Font("Arial", 11, FontStyle.Bold),
+                BackColor = ColorTranslator.FromHtml("#ff9800"),
+                ForeColor = Color.White,
+                Size = new Size(220, 45),
+                Left = 230,
+                Top = 440,
+                FlatStyle = FlatStyle.Flat
+            };
             btnContinue.Click += async (s, e) => await NextLevelRestPhase();
             frame.Controls.Add(btnContinue);
         }
@@ -1720,7 +1957,21 @@ public class GameGUI : Form
                     if (ctrl is Button b) b.Enabled = false;
 
                 // Chama o serviço com a opção escolhida pelo jogador
-                var result = _eventService.GetEventResult(gameEvent, chosenIndex, team);
+                EventResult result = _eventService.GetEventResult(
+                    gameEvent,
+                    chosenIndex,
+                    team);
+
+                string chosenOption = optionTexts[chosenIndex]
+                    ?? $"Opção {chosenIndex + 1}";
+
+                // Guarda a cena + decisão + consequência para que o próximo
+                // evento continue exatamente de onde este terminou.
+                eventHistory.Add(
+                    $"Evento: {gameEvent.Name}. " +
+                    $"{gameEvent.Description} " +
+                    $"Escolha do grupo: {chosenOption} " +
+                    $"Resultado: {result.Title}. {result.Description}");
 
                 // Exibe o resultado na mesma tela
                 await ShowEventResult(innerBorder, result);
@@ -1811,19 +2062,26 @@ public class GameGUI : Form
     /// </summary>
     private async Task ApplyEventResult(EventResult result)
     {
-        var heroAffected = team.First(a => a.Id == result.AffectedAgentId);
-        if (result.HpBonus != 0)
+        Agent? heroAffected = result.AffectedAgentId != 0
+            ? team.FirstOrDefault(a => a.Id == result.AffectedAgentId)
+            : null;
+
+        if (heroAffected is not null && result.HpBonus != 0)
         {
             heroAffected.CurrentLife += result.HpBonus;
-            if(heroAffected.CurrentLife < 0)
-                heroAffected.CurrentLife = 0;
+            heroAffected.CurrentLife = Math.Clamp(
+                heroAffected.CurrentLife,
+                0,
+                heroAffected.MaxLife);
         }
 
-        if (result.HpBonusMaxLife != 0)
+        if (heroAffected is not null && result.HpBonusMaxLife != 0)
         {
             heroAffected.MaxLife += result.HpBonusMaxLife;
-            if (heroAffected.MaxLife < 0)
-                heroAffected.MaxLife = 0;
+            heroAffected.MaxLife = Math.Max(1, heroAffected.MaxLife);
+            heroAffected.CurrentLife = Math.Min(
+                heroAffected.CurrentLife,
+                heroAffected.MaxLife);
         }
 
         if(result.GlobalShield != 0)
@@ -1846,7 +2104,7 @@ public class GameGUI : Form
             }
         }
 
-        if (result.PermanentAttack != 0)
+        if (heroAffected is not null && result.PermanentAttack != 0)
         {
             heroAffected.BaseAttack += result.PermanentAttack;
         }
@@ -1856,7 +2114,7 @@ public class GameGUI : Form
             extraDc = result.ExtraDc;
         }
 
-        if (result.TemporarySkillBonus != 0)
+        if (heroAffected is not null && result.TemporarySkillBonus != 0)
         {
             heroAffected.TemporarySkillBonus += result.TemporarySkillBonus;
         }
@@ -1896,7 +2154,31 @@ public class GameGUI : Form
 
     private async Task NextLevelRestPhase()
     {
-        await ExecuteRestPhase();
+        ShowEventGenerationScreen();
+
+        // Dá uma chance para o WinForms pintar a tela de carregamento
+        // antes de começar a inferência local.
+        await Task.Yield();
+
+        Event? mechanicsTemplate = await _eventService.RandomEvent();
+        if (mechanicsTemplate is null)
+        {
+            await ExecuteRestPhase();
+            return;
+        }
+
+        Event? generatedEvent = await _battleNarrator.GenerateEventAsync(
+            mechanicsTemplate,
+            team.ToList(),
+            purchasedItems.ToList(),
+            currentLevel,
+            gold,
+            battleStoryHistory.ToList(),
+            eventHistory.ToList());
+
+        Event gameEvent = generatedEvent ?? mechanicsTemplate;
+
+        await NextEventPhase(gameEvent);
     }
 
     private void ShowEventGenerationScreen()
@@ -2008,6 +2290,11 @@ public class GameGUI : Form
             logBox.AppendText($"🧠 {especialistas} Especialista(s): DC alvo reduzida em -{especialistas}.\r\n");
 
         currentLevel++;
+
+        // O novo andar já começa a preparar sua história de batalha enquanto
+        // o jogador está no descanso e, principalmente, durante a loja.
+        if (currentLevel <= 5)
+            StartInitialBattleStoryGeneration();
 
         Button btnNext = new Button
         {

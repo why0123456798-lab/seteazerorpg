@@ -17,27 +17,27 @@ public class EventService : IEventService
         {
             1 => new Event(
                 1,
-                "Evento",
-                string.Empty,
-                string.Empty,
-                string.Empty,
-                string.Empty),
+                "Um Encontro na Estrada",
+                "Uma presença inesperada interrompe a marcha do grupo.",
+                "Enfrentar a situação pela força.",
+                "Investigar cuidadosamente o que aconteceu.",
+                "Evitar o problema e seguir em frente."),
 
             2 => new Event(
                 2,
-                "Evento",
-                string.Empty,
-                string.Empty,
-                string.Empty,
-                string.Empty),
+                "Um Caminho Perigoso",
+                "O grupo encontra um obstáculo que pode esconder uma oportunidade ou uma ameaça.",
+                "Resistir ao perigo e proteger o grupo.",
+                "Encontrar uma solução usando astúcia.",
+                "Recuar e procurar outro caminho."),
 
             _ => new Event(
                 3,
-                "Evento",
-                string.Empty,
-                string.Empty,
-                string.Empty,
-                string.Empty)
+                "Um Santuário Abandonado",
+                "Uma antiga construção chama a atenção do grupo durante a jornada.",
+                "Examinar o santuário com cuidado.",
+                "Forçar a passagem e procurar uma recompensa.",
+                "Respeitar o lugar e deixar o local em paz.")
         };
 
         return Task.FromResult<Event?>(mechanicsTemplate);
