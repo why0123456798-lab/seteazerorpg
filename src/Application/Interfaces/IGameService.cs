@@ -1,8 +1,10 @@
-﻿using System;
+﻿using RPGBattleMaker.Domain.Entities;
+
+using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace RPGBattleMaker.Infrastructure.Interface
+namespace RPGBattleMaker.Application.Interfaces
 {
     public interface IGameService
     {
@@ -10,3 +12,4 @@ namespace RPGBattleMaker.Infrastructure.Interface
         List<Agent> RollMarket(List<Agent> team, List<Agent> allAgents, int level = 1);
     }
 }
+

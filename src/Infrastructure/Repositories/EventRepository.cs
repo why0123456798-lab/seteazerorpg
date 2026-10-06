@@ -1,15 +1,16 @@
 ﻿using Microsoft.Data.Sqlite;
-using RPGBattleMaker.Data.Interface;
-using RPGBattleMaker.Models;
+using RPGBattleMaker.Application.Interfaces;
+using RPGBattleMaker.Domain.Entities;
+using RPGBattleMaker.Infrastructure.Database;
 using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace RPGBattleMaker.Data
+namespace RPGBattleMaker.Infrastructure.Repositories
 {
     public class EventRepository : IEventRepository
     {
-        private readonly string connectionString = "Data Source=rpg_battle.db";
+        private readonly string connectionString = DatabaseConfiguration.ConnectionString;
         public EventRepository()
         {
 
@@ -48,3 +49,4 @@ namespace RPGBattleMaker.Data
         }
     }
 }
+

@@ -1,56 +1,10 @@
-﻿public class SynergyAgents
-{
-    // Estrutura que guarda o nome da Sinergia e a lista de heróis que fazem parte dela
-    public class SynergyGroup
-    {
-        public string Name { get; set; }
-        public List<string> Heroes { get; set; }
-
-        public SynergyGroup(string name, params string[] heroes)
-        {
-            Name = name;
-            // Guarda os nomes sem espaços extras para evitar erros de digitação
-            Heroes = heroes.Select(h => h.Trim()).ToList();
-        }
-    }
-
-    public List<SynergyGroup> Groups { get; set; }
-    public SynergyAgents()
-    {
-
-        // Mapeamento exato de todas as sinergias do seu arquivo synergy_values.csv
-        Groups = new List<SynergyGroup>
-        {
-            new SynergyGroup("Irmãs", "Akane", "Kazumi"),
-            new SynergyGroup("Irmãos", "Shyva", "Samir"),
-            new SynergyGroup("Hara-Kiri", "Kazumi", "Megan", "Marcos", "Nyu", "Seph Flores"),
-            new SynergyGroup("Líder", "Kazumi", "Vysenia", "Marcus"),
-            new SynergyGroup("A Chama", "Agni", "Aziza", "Shantal"),
-            new SynergyGroup("Trindade", "Thoryn", "Barbara", "Zendaya"),
-            new SynergyGroup("Amor", "Shantal", "Saphyra"),
-            new SynergyGroup("Casal Real", "Vysenia", "Daerion"),
-            new SynergyGroup("Amor Platônico", "Meilyn", "Daerion"),
-            new SynergyGroup("Ordem", "Perdigas", "Leão", "Maria Cecília"),
-            new SynergyGroup("Nova Ordem", "Tom", "Maria Cecília", "Matheus", "Akane"),
-            new SynergyGroup("Uagamora", "Oriven", "Mauga", "Shyvana", "Kael", "Kyra", "Viktor", "Aryte", "Symon"),
-            new SynergyGroup("Solo", "Kazumi", "Crane", "Lilith"),
-            new SynergyGroup("Ninho do Dragão", "Cael", "Meilyn", "Daerion", "Vysenia", "Aya"),
-            new SynergyGroup("Dragão", "Daerion", "Shyvana", "Vysenia"),
-            new SynergyGroup("Caos", "Shyva", "Samir", "Aya", "Padre", "Sirius"),
-            new SynergyGroup("Vilões", "Lilith", "Caim"),
-            new SynergyGroup("Vendedores", "Ruivo", "Zahra", "Bree", "Mimoso", "Yasmin"),
-            new SynergyGroup("Fé", "Thoryn", "Nix", "Orion", "Perdigas", "Arkmeros", "Yasmin")
-        };
-    }
-}
+﻿namespace RPGBattleMaker.Domain.Entities;
 
 public class Agent
 {
     public int Id { get; set; }
     public string Name { get; set; }
     public string Type { get; set; }
-    public string Desc { get; set; }
-    public string Player { get; set; }
     public int Rarity { get; set; }
     public string SynergyText { get; set; }
 
@@ -108,7 +62,7 @@ public class Agent
         TemporaryMaxLifeBonus = 0;
     }
 
-    public int GetAttr(string attrName, List<Agent> teamAgents)
+    public int GetAttr(string attrName)
     {
         int baseVal = 0;
         if (attrName == Ataque) baseVal = BaseAttack;
@@ -127,3 +81,5 @@ public class AgentType
     public const string Especialista = "Especialista";
     public const string Suporte = "Suporte";
 }
+
+

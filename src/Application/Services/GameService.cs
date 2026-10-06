@@ -1,11 +1,12 @@
-﻿using RPGBattleMaker.Domain;
-using RPGBattleMaker.Infrastructure.Interface;
+﻿using RPGBattleMaker.Domain.Helpers;
+using RPGBattleMaker.Domain.Entities;
+using RPGBattleMaker.Application.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Drawing.Drawing2D;
 using System.Text;
 
-namespace RPGBattleMaker.Infrastructure
+namespace RPGBattleMaker.Application.Services
 {
     public class GameService : IGameService
     {
@@ -62,3 +63,4 @@ namespace RPGBattleMaker.Infrastructure
         }
     }
 }
+

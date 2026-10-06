@@ -1,8 +1,10 @@
-﻿using System;
+﻿using RPGBattleMaker.Domain.Entities;
+
+using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace RPGBattleMaker.Infrastructure.Interface
+namespace RPGBattleMaker.Application.Interfaces
 {
     public interface IAgentService
     {
@@ -12,3 +14,4 @@ namespace RPGBattleMaker.Infrastructure.Interface
         Task<int> GetSynergyBonus(Agent currentAgent, List<Agent> teamAgents);
     }
 }
+

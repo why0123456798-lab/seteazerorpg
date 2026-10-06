@@ -1,11 +1,10 @@
-﻿using RPGBattleMaker.Data.Interface;
-using RPGBattleMaker.Infrastructure.Interface;
-using RPGBattleMaker.Models;
+﻿using RPGBattleMaker.Application.Interfaces;
+using RPGBattleMaker.Domain.Entities;
 using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace RPGBattleMaker.Infrastructure
+namespace RPGBattleMaker.Application.Services
 {
     public class EventService : IEventService
     {
@@ -22,8 +21,8 @@ namespace RPGBattleMaker.Infrastructure
             if(eventOccurs)
             {
                 var events = await _eventRepository.GetAllEvents();
-                var valueId = random.Next(1, events.Count);
-                return events.FirstOrDefault(f => f.Id == valueId);
+                if (events.Count == 0) return null;
+                return events[random.Next(events.Count)];
             }
 
             return null;
@@ -164,3 +163,4 @@ namespace RPGBattleMaker.Infrastructure
         }
     }
 }
+

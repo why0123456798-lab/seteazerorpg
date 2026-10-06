@@ -16,10 +16,11 @@
 	</ItemGroup>
 	<ItemGroup>
 
-		<None Update="Shared\Images\**\*.*">
+		<None Update="Resources\Images\**\*.*">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 	</ItemGroup>
 
 
 </Project>
+

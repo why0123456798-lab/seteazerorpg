@@ -1,8 +1,9 @@
-﻿using System;
+﻿using RPGBattleMaker.Domain.Entities;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace RPGBattleMaker.Infrastructure
+namespace RPGBattleMaker.Domain.Helpers
 {
     public static class AgentHelper
     {
@@ -16,3 +17,4 @@ namespace RPGBattleMaker.Infrastructure
         }
     }
 }
+

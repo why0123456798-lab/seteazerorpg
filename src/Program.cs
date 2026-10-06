@@ -1,17 +1,18 @@
-using System;
+﻿using System;
 using System.Windows.Forms;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using RPGBattleMaker.Data;
-using RPGBattleMaker.Data.Interface;
-using RPGBattleMaker.Infrastructure;
-using RPGBattleMaker.Infrastructure.Interface;
+using RPGBattleMaker.Application.Interfaces;
+using RPGBattleMaker.Application.Services;
+using RPGBattleMaker.Infrastructure.Database;
+using RPGBattleMaker.Infrastructure.Repositories;
+using RPGBattleMaker.Presentation.Forms;
 
 namespace RPGBattleMaker
 {
     internal static class Program
     {
-        // O Host que guardará os serviços injetados
+        // O Host que guardarÃ¡ os serviÃ§os injetados
         public static IHost? ServiceHost { get; private set; }
 
         [STAThread]
@@ -23,15 +24,13 @@ namespace RPGBattleMaker
             ServiceHost = Host.CreateDefaultBuilder()
                 .ConfigureServices((context, services) =>
                 {
-                    services.AddSingleton<IDbContext, DbContext>();
+                    services.AddSingleton<IDatabaseInitializer, GameDatabaseInitializer>();
 
                     services.AddSingleton<IAgentRepository, AgentRepository>();
-                    services.AddSingleton<IItemRepository, ItemRepository>();
                     services.AddSingleton<IEventRepository, EventRepository>();
 
                     services.AddSingleton<IAgentService, AgentService>();
                     services.AddSingleton<IGameService, GameService>();
-                    services.AddSingleton<IItemService, ItemService>();
                     services.AddSingleton<IEventService, EventService>();
 
                     services.AddTransient<GameGUI>();
@@ -42,7 +41,7 @@ namespace RPGBattleMaker
 
             var mainForm = ServiceHost.Services.GetRequiredService<GameGUI>();
 
-            Application.Run(mainForm);
+            System.Windows.Forms.Application.Run(mainForm);
         }
     }
 }

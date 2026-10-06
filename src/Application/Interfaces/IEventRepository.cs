@@ -1,12 +1,13 @@
-﻿using RPGBattleMaker.Models;
+﻿using RPGBattleMaker.Domain.Entities;
 using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace RPGBattleMaker.Data.Interface
+namespace RPGBattleMaker.Application.Interfaces
 {
     public interface IEventRepository
     {
         Task<List<Event>> GetAllEvents();
     }
 }
+

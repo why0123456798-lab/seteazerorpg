@@ -1,11 +1,11 @@
-﻿using RPGBattleMaker.Data.Interface;
-using RPGBattleMaker.Infrastructure.Interface;
+﻿using RPGBattleMaker.Application.Interfaces;
+using RPGBattleMaker.Domain.Entities;
 using System;
 using System.Collections.Generic;
 using System.Drawing.Drawing2D;
 using System.Text;
 
-namespace RPGBattleMaker.Infrastructure
+namespace RPGBattleMaker.Application.Services
 {
     public class AgentService : IAgentService
     {
@@ -24,8 +24,8 @@ namespace RPGBattleMaker.Infrastructure
             string cacheKey = $"{agent.Name}_{size.Width}x{size.Height}";
             if (imageCache.ContainsKey(cacheKey)) return imageCache[cacheKey];
 
-            string imgPath = Path.Combine(baseDir, "shared/images", agent.ImageFilename + ".png");
-            if (!File.Exists(imgPath)) imgPath = Path.Combine(baseDir, "shared/images", agent.ImageFilename + ".jpg");
+            string imgPath = Path.Combine(baseDir, "Resources/Images", agent.ImageFilename + ".png");
+            if (!File.Exists(imgPath)) imgPath = Path.Combine(baseDir, "Resources/Images", agent.ImageFilename + ".jpg");
 
             if (File.Exists(imgPath))
             {
@@ -57,8 +57,6 @@ namespace RPGBattleMaker.Infrastructure
 
         public async Task<string> GetSynergyName(Agent agent)
         {
-            var synergyAgents = new SynergyAgents();
-
             var heroSynergies = await GetSynergiesForHero(agent.Id);
 
             if (!string.IsNullOrEmpty(heroSynergies))
@@ -156,3 +154,4 @@ namespace RPGBattleMaker.Infrastructure
         }
     }
 }
+

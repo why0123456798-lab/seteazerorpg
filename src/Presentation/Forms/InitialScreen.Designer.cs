@@ -36,3 +36,4 @@ partial class InitialScreen
 
     #endregion
 }
+

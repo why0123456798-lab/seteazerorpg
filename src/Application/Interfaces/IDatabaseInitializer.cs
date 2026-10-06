@@ -2,10 +2,11 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace RPGBattleMaker.Data.Interface
+namespace RPGBattleMaker.Application.Interfaces
 {
-    public interface IDbContext
+    public interface IDatabaseInitializer
     {
         Task InitializeDatabase();
     }
 }
+

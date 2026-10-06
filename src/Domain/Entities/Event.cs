@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace RPGBattleMaker.Models
+namespace RPGBattleMaker.Domain.Entities
 {
     public class Event
     {
@@ -50,8 +50,7 @@ namespace RPGBattleMaker.Models
 
         public static bool GetEventIsPositive(int pericia, int dadoPC)
         {
-            var random = new Random();
-            var dado = random.Next(1,20);
+            var dado = Random.Shared.Next(1, 21);
 
             if ((pericia + dado) >= dadoPC)
                 return true;
@@ -60,3 +59,4 @@ namespace RPGBattleMaker.Models
         }
     }
 }
+

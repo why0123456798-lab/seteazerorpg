@@ -1,15 +1,17 @@
 ﻿using Microsoft.Data.Sqlite;
-using RPGBattleMaker.Data.Interface;
+using RPGBattleMaker.Application.Interfaces;
+using RPGBattleMaker.Domain.Entities;
+using RPGBattleMaker.Infrastructure.Database;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Text;
 
-namespace RPGBattleMaker.Data
+namespace RPGBattleMaker.Infrastructure.Repositories
 {
     public class AgentRepository : IAgentRepository
     {
-        private readonly string connectionString = "Data Source=rpg_battle.db";
+        private readonly string connectionString = DatabaseConfiguration.ConnectionString;
         public AgentRepository()
         {
 
@@ -34,7 +36,7 @@ namespace RPGBattleMaker.Data
                         string name = reader.GetString(1);
                         string type = reader.GetString(2);
                         int rarity = reader.GetInt32(3);
-                        string synergyText = reader.IsDBNull(4) ? "" : reader.GetString(5);
+                        string synergyText = reader.IsDBNull(4) ? "" : reader.GetString(4);
                         int ataque = reader.GetInt32(5);
                         int defesa = reader.GetInt32(6);
                         int vida = reader.GetInt32(7);
@@ -96,6 +98,9 @@ namespace RPGBattleMaker.Data
 
                     using (var reader = await selectCmd.ExecuteReaderAsync())
                     {
+                        if (!await reader.ReadAsync())
+                            throw new KeyNotFoundException($"Herói com ID {heroId} não encontrado.");
+
                         // Resgata os dados mapeados na ordem exata do SELECT acima
                         int id = reader.GetInt32(0);
                         string name = reader.GetString(1);
@@ -115,3 +120,4 @@ namespace RPGBattleMaker.Data
         }
     }
 }
+

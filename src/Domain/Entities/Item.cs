@@ -1,6 +1,4 @@
-﻿using RPGBattleMaker.Data;
-
-namespace RPGBattleMaker.Data
+﻿namespace RPGBattleMaker.Domain.Entities
 {
     public enum ItemEffect
     {

@@ -1,8 +1,10 @@
-﻿using System;
+﻿using RPGBattleMaker.Domain.Entities;
+
+using System;
 using System.Collections.Generic;
 using System.Text;
 
-namespace RPGBattleMaker.Data.Interface
+namespace RPGBattleMaker.Application.Interfaces
 {
     public interface IAgentRepository
     {
@@ -11,3 +13,4 @@ namespace RPGBattleMaker.Data.Interface
         Task<List<string>> GetHeroSynergies(int heroId);
     }
 }
+

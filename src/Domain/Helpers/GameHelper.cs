@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace RPGBattleMaker.Domain
+namespace RPGBattleMaker.Domain.Helpers
 {
     public static class GameHelper
     {
@@ -25,3 +25,4 @@ namespace RPGBattleMaker.Domain
         }
     }
 }
+

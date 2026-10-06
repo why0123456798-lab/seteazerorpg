@@ -1,10 +1,12 @@
 ﻿using CsvHelper;
 using Microsoft.Data.Sqlite;
-using RPGBattleMaker.Data;
-using RPGBattleMaker.Data.Interface;
-using RPGBattleMaker.Infrastructure;
-using RPGBattleMaker.Infrastructure.Interface;
-using RPGBattleMaker.Models;
+using RPGBattleMaker.Application.Interfaces;
+using RPGBattleMaker.Application.Services;
+using RPGBattleMaker.Domain.Entities;
+using RPGBattleMaker.Domain.Helpers;
+using RPGBattleMaker.Infrastructure.Database;
+
+namespace RPGBattleMaker.Presentation.Forms;
 using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Reflection;
@@ -12,7 +14,7 @@ using System.Reflection;
 public class GameGUI : Form
 {
     #region Private List
-    private readonly IDbContext _dbContext;
+    private readonly IDatabaseInitializer _databaseInitializer;
     private readonly IAgentService _agentService;
     private readonly IGameService _gameService;
     private readonly IEventService _eventService;
@@ -55,11 +57,11 @@ public class GameGUI : Form
     #endregion
 
     #region Constructor
-    public GameGUI(IDbContext dbContext, IAgentService agentService, IGameService gameService, IEventService eventService)
+    public GameGUI(IDatabaseInitializer databaseInitializer, IAgentService agentService, IGameService gameService, IEventService eventService)
     {
         _agentService = agentService;
         _gameService = gameService;
-        _dbContext = dbContext;
+        _databaseInitializer = databaseInitializer;
 
         this.Text = "RPG Autobattler Roguelike";
         this.Size = new Size(970, 740);
@@ -96,7 +98,7 @@ public class GameGUI : Form
         market.Clear();
 
         #region Populate Data from DB
-        _dbContext.InitializeDatabase().Wait();
+        _databaseInitializer.InitializeDatabase().Wait();
         _agentService.GetAllHeroes(allAgents).Wait();
 
         itemShop.Clear();
@@ -702,7 +704,7 @@ public class GameGUI : Form
 
         foreach (var a in aliveHeroes)
         {
-            int val = a.GetAttr(currentTheme, team) + (await _agentService.GetSynergyBonus(a, aliveHeroes));
+            int val = a.GetAttr(currentTheme) + (await _agentService.GetSynergyBonus(a, aliveHeroes));
             if (currentTheme == Agent.Ataque) val += roundBonuses[Agent.Ataque];
             else if (currentTheme == Agent.Defesa) val += roundBonuses[Agent.Defesa];
 

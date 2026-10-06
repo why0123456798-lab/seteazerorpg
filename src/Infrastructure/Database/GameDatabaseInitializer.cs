@@ -1,12 +1,12 @@
 ﻿using Microsoft.Data.Sqlite;
-using RPGBattleMaker.Data.Interface;
+using RPGBattleMaker.Application.Interfaces;
 
-namespace RPGBattleMaker.Data
+namespace RPGBattleMaker.Infrastructure.Database
 {
-    public class DbContext : IDbContext
+    public class GameDatabaseInitializer : IDatabaseInitializer
     {
-        private readonly string connectionString = "Data Source=rpg_battle.db";
-        public DbContext()
+        private readonly string connectionString = DatabaseConfiguration.ConnectionString;
+        public GameDatabaseInitializer()
         {
 
         }
@@ -25,13 +25,12 @@ namespace RPGBattleMaker.Data
 
                 string createTableEventsQuery = @"
                 CREATE TABLE IF NOT EXISTS Events (
-                    Id INTEGER NOT NULL,
-                    Name TEXT,
-                    Description TEXT,
-                    OptionA TEXT,
-                    OptionB TEXT,
-                    OptionC TEXT,
-                    PRIMARY KEY(Id AUTOINCREMENT)
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Name TEXT NOT NULL,
+                    Description TEXT NOT NULL,
+                    OptionA TEXT NOT NULL,
+                    OptionB TEXT NOT NULL,
+                    OptionC TEXT NOT NULL
                 );";
 
                 using (var createTableCmd = new SqliteCommand(createTableEventsQuery, connection))
@@ -39,12 +38,14 @@ namespace RPGBattleMaker.Data
                     await createTableCmd.ExecuteNonQueryAsync();
                 }
 
-                // 4. RESETA O BANCO
-                using (var deleteCmd = new SqliteCommand("DELETE FROM Events;", connection))
+                using (var countEventsCmd = new SqliteCommand("SELECT COUNT(*) FROM Events;", connection))
                 {
-                    await deleteCmd.ExecuteNonQueryAsync();
+                    var eventCount = Convert.ToInt32(await countEventsCmd.ExecuteScalarAsync());
+                    if (eventCount > 0)
+                        return;
                 }
 
+                // Seed inicial
                 #region Events
                 using (var transaction = connection.BeginTransaction())
                 {
@@ -91,16 +92,15 @@ namespace RPGBattleMaker.Data
                 // 2. Criação da Tabela Agentes (Garantindo a restrição de Primary Key de forma explícita)
                 string createTableQuery = @"
                 CREATE TABLE IF NOT EXISTS Agentes (
-                    Id INTEGER NOT NULL,
-                    Agente TEXT, 
-                    Tipo TEXT, 
-                    Raridade INTEGER, 
-                    Ataque INTEGER, 
-                    Defesa INTEGER, 
-                    Vida INTEGER, 
-                    Pericia INTEGER,  
-                    Sinergias TEXT,
-                    PRIMARY KEY(Id AUTOINCREMENT)
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    Agente TEXT NOT NULL,
+                    Tipo TEXT NOT NULL,
+                    Raridade INTEGER NOT NULL,
+                    Ataque INTEGER NOT NULL,
+                    Defesa INTEGER NOT NULL,
+                    Vida INTEGER NOT NULL,
+                    Pericia INTEGER NOT NULL,
+                    Sinergias TEXT
                 );";
 
                 using (var createTableCmd = new SqliteCommand(createTableQuery, connection))
@@ -111,33 +111,16 @@ namespace RPGBattleMaker.Data
                 // 3. Criação da Tabela Sinergias (Apontando exatamente para a coluna Id)
                 string createTableSynergyQuery = @"
                 CREATE TABLE IF NOT EXISTS Sinergias (
-                    Id INTEGER NOT NULL,
-                    AgenteId INTEGER,
-                    Tipo TEXT, 
-                    Name TEXT,
-                    PRIMARY KEY(Id AUTOINCREMENT),
+                    Id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    AgenteId INTEGER NOT NULL,
+                    Tipo TEXT NOT NULL,
+                    Name TEXT NOT NULL,
                     FOREIGN KEY(AgenteId) REFERENCES Agentes(Id) ON DELETE CASCADE
                 );";
 
                 using (var createTableSynergyCmd = new SqliteCommand(createTableSynergyQuery, connection))
                 {
                     await createTableSynergyCmd.ExecuteNonQueryAsync();
-                }
-
-                // 4. RESETA O BANCO
-                using (var deleteCmd = new SqliteCommand("DELETE FROM Sinergias;", connection))
-                {
-                    await deleteCmd.ExecuteNonQueryAsync();
-                }
-
-                using (var deleteCmd = new SqliteCommand("DELETE FROM Agentes;", connection))
-                {
-                    await deleteCmd.ExecuteNonQueryAsync();
-                }
-
-                using (var sqliteSequenceCmd = new SqliteCommand("DELETE FROM sqlite_sequence WHERE name='Agentes' OR name='Sinergias' OR name='Events';", connection))
-                {
-                    await sqliteSequenceCmd.ExecuteNonQueryAsync();
                 }
 
                 // 5. SEED: Insere os valores via transação
@@ -167,7 +150,7 @@ namespace RPGBattleMaker.Data
                             insertCmd.Parameters.AddWithValue("$pericia", pericia);
                             insertCmd.Parameters.AddWithValue("$sinergia", sinergiasRaw);
 
-                            long agenteId = (long)insertCmd.ExecuteScalar();
+                            long agenteId = Convert.ToInt64(await insertCmd.ExecuteScalarAsync());
 
                             if (!string.IsNullOrEmpty(sinergiasRaw))
                             {

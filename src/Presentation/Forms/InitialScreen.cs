@@ -1,4 +1,4 @@
-namespace RpgAutobattler;
+﻿namespace RpgAutobattler;
 
 public partial class InitialScreen : Form
 {
@@ -7,3 +7,4 @@ public partial class InitialScreen : Form
         InitializeComponent();
     }
 }
+
