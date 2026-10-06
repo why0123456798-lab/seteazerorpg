@@ -12,6 +12,7 @@ namespace RPGBattleMaker.Application.Interfaces
         Task GetAllHeroes(List<Agent> allAgents);
         Task<string> GetSynergyName(Agent agent);
         Task<int> GetSynergyBonus(Agent currentAgent, List<Agent> teamAgents);
+        Task<List<string>> GetActiveSynergies(List<Agent> teamAgents);
     }
 }
 

@@ -5,6 +5,7 @@ using RPGBattleMaker.Application.Services;
 using RPGBattleMaker.Domain.Entities;
 using RPGBattleMaker.Domain.Helpers;
 using RPGBattleMaker.Infrastructure.Database;
+using RPGBattleMaker.Presentation.Controls;
 
 namespace RPGBattleMaker.Presentation.Forms;
 using System.Drawing.Drawing2D;
@@ -23,37 +24,37 @@ public class GameGUI : Form
     private List<Item> purchasedItems = new List<Item>();
 
     private List<Agent> allAgents = new List<Agent>();
-    private Random random = new Random();
+    private readonly Random random = Random.Shared;
 
     // Estado do Jogo
     private List<Agent> team = new List<Agent>();
     private int gold;
     private int currentLevel;
-    private string mode;
+    private string mode = "Difícil";
     private Dictionary<string, int> roundBonuses = new Dictionary<string, int>();
     private List<Agent> market = new List<Agent>();
     private int rerollCount = 1;
 
     // Estado da Batalha/Missão
-    private string currentTheme;
+    private string currentTheme = Agent.Ataque;
     private int dc;
     private int extraDc = 0;
     private Dictionary<string, int> shields = new Dictionary<string, int>();
     private int sucessos;
     private int falhas;
     private int testeNum;
-    private Agent bestHero;
+    private Agent bestHero = null!;
     private int bestVal;
 
     // Componentes da Interface Dinâmica
-    private Panel mainPanel;
-    private Dictionary<int, Color> rarityColors;
+    private Panel mainPanel = null!;
+    private Dictionary<int, Color> rarityColors = null!;
 
     // Controles específicos de telas para atualização
-    private RichTextBox logTxt;
-    private Button btnRoll;
-    private Label lblHeroStats;
-    private PictureBox pbBattleHero;
+    private RichTextBox logTxt = null!;
+    private Button btnRoll = null!;
+    private Label lblHeroStats = null!;
+    private PictureBox pbBattleHero = null!;
     #endregion
 
     #region Constructor
@@ -64,9 +65,13 @@ public class GameGUI : Form
         _databaseInitializer = databaseInitializer;
 
         this.Text = "RPG Autobattler Roguelike";
-        this.Size = new Size(970, 740);
+        this.Size = new Size(1440, 900);
+        this.MinimumSize = new Size(1180, 720);
         this.StartPosition = FormStartPosition.CenterScreen;
-        this.BackColor = ColorTranslator.FromHtml("#1e1e1e");
+        this.WindowState = FormWindowState.Maximized;
+        this.FormBorderStyle = FormBorderStyle.Sizable;
+        this.BackColor = ColorTranslator.FromHtml("#10131b");
+        this.Font = new Font("Segoe UI", 9F);
 
         rarityColors = new Dictionary<int, Color>
             {
@@ -77,12 +82,18 @@ public class GameGUI : Form
                 { 5, ColorTranslator.FromHtml("#ff9800") }
             };
 
-        mainPanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent };
+        mainPanel = new Panel { Dock = DockStyle.Fill, BackColor = ColorTranslator.FromHtml("#10131b") };
+        mainPanel.ControlAdded += (_, e) =>
+        {
+            if (e.Control is not null)
+                ApplyGameTheme(e.Control);
+        };
         this.Controls.Add(mainPanel);
+
+        _eventService = eventService;
 
         ResetGameState();
         CreateModeSelectionScreen();
-        _eventService = eventService;
     }
     #endregion
 
@@ -111,54 +122,252 @@ public class GameGUI : Form
         mainPanel.Controls.Clear();
     }
 
+    private static VectorIconKind GetItemIconKind(Item item)
+    {
+        return item.Effect switch
+        {
+            ItemEffect.BonusAtaque => item.Name.Contains("Machado", StringComparison.OrdinalIgnoreCase) ? VectorIconKind.Axe : VectorIconKind.Sword,
+            ItemEffect.BonusDefesa => item.Name.Contains("Armadura", StringComparison.OrdinalIgnoreCase) ? VectorIconKind.Armor : VectorIconKind.Shield,
+            ItemEffect.BonusHP => VectorIconKind.Potion,
+            ItemEffect.BonusPericia => VectorIconKind.Tome,
+            ItemEffect.BonusEscudo => VectorIconKind.Shield,
+            ItemEffect.ReducaoDC => item.Name.Contains("Mapa", StringComparison.OrdinalIgnoreCase)
+                ? VectorIconKind.Map
+                : item.Name.Contains("Olho", StringComparison.OrdinalIgnoreCase) ? VectorIconKind.Eye : VectorIconKind.Target,
+            _ => VectorIconKind.Relic
+        };
+    }
+
+    private static Panel CreateStatCell(VectorIconKind iconKind, string text, Color textColor)
+    {
+        Panel cell = new()
+        {
+            Dock = DockStyle.Fill,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            BackColor = Color.Transparent
+        };
+
+        FlowLayoutPanel row = new()
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            BackColor = Color.Transparent
+        };
+
+        row.Controls.Add(new VectorIcon(iconKind, textColor, 16));
+        row.Controls.Add(new Label
+        {
+            Text = text,
+            AutoSize = true,
+            ForeColor = textColor,
+            Font = new Font("Segoe UI", 8.5f),
+            Margin = new Padding(2, 1, 0, 0)
+        });
+
+        void CenterRow()
+        {
+            row.Left = Math.Max(0, (cell.ClientSize.Width - row.Width) / 2);
+            row.Top = Math.Max(0, (cell.ClientSize.Height - row.Height) / 2);
+        }
+
+        cell.Controls.Add(row);
+        cell.Resize += (_, _) => CenterRow();
+
+        CenterRow();
+
+        return cell;
+    }
+
+    private static TableLayoutPanel CreateMarketStats(Agent agent, bool hideStats)
+    {
+        string attack = hideStats ? "ATK: ?" : $"ATK: {agent.BaseAttack}";
+        string defense = hideStats ? "DEF: ?" : $"DEF: {agent.BaseDefense}";
+        string skill = hideStats ? "PER: ?" : $"PER: {agent.BaseSkill}";
+        string hp = $"HP: {agent.MaxLife}";
+
+        TableLayoutPanel grid = new()
+        {
+            ColumnCount = 2,
+            RowCount = 2,
+            BackColor = Color.Transparent,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            AutoSize = false
+        };
+
+        for (int i = 0; i < 2; i++)
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+
+        for (int i = 0; i < 2; i++)
+            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
+
+        grid.Controls.Add(CreateStatCell(VectorIconKind.Sword, attack, ColorTranslator.FromHtml("#d8dee9")), 0, 0);
+        grid.Controls.Add(CreateStatCell(VectorIconKind.Shield, defense, ColorTranslator.FromHtml("#d8dee9")), 1, 0);
+        grid.Controls.Add(CreateStatCell(VectorIconKind.Target, skill, ColorTranslator.FromHtml("#d8dee9")), 0, 1);
+        grid.Controls.Add(CreateStatCell(VectorIconKind.Heart, hp, ColorTranslator.FromHtml("#d8dee9")), 1, 1);
+
+        return grid;
+    }
+
+    private static TableLayoutPanel CreateTeamStats(Agent agent)
+    {
+        TableLayoutPanel grid = new()
+        {
+            ColumnCount = 2,
+            RowCount = 2,
+            BackColor = Color.Transparent,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty,
+            AutoSize = false
+        };
+
+        for (int i = 0; i < 2; i++)
+            grid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+
+        for (int i = 0; i < 2; i++)
+            grid.RowStyles.Add(new RowStyle(SizeType.Percent, 50f));
+
+        Color textColor = Color.White;
+        grid.Controls.Add(CreateStatCell(VectorIconKind.Heart, $"HP: {agent.CurrentLife}/{agent.MaxLife}", textColor), 0, 0);
+        grid.Controls.Add(CreateStatCell(VectorIconKind.Sword, $"ATK: {agent.BaseAttack}", textColor), 1, 0);
+        grid.Controls.Add(CreateStatCell(VectorIconKind.Shield, $"DEF: {agent.BaseDefense}", textColor), 0, 1);
+        grid.Controls.Add(CreateStatCell(VectorIconKind.Target, $"PER: {agent.BaseSkill}", textColor), 1, 1);
+
+        return grid;
+    }
+
+    private static void ApplyGameTheme(Control control)
+    {
+        if (control is Button button)
+        {
+            button.FlatStyle = FlatStyle.Flat;
+            button.FlatAppearance.BorderSize = 0;
+            button.Cursor = Cursors.Hand;
+            button.Font = new Font("Segoe UI Semibold", Math.Max(9, button.Font.Size), FontStyle.Bold);
+            button.Padding = new Padding(6, 2, 6, 2);
+        }
+        else if (control is GroupBox group)
+        {
+            group.ForeColor = ColorTranslator.FromHtml("#d7b56d");
+            group.Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold);
+            group.BackColor = ColorTranslator.FromHtml("#171c27");
+        }
+        else if (control is Label label && label.Font.Name.StartsWith("Arial", StringComparison.OrdinalIgnoreCase))
+        {
+            label.Font = new Font("Segoe UI", label.Font.Size, label.Font.Style);
+        }
+
+        control.ControlAdded += (_, e) =>
+        {
+            if (e.Control is not null)
+                ApplyGameTheme(e.Control);
+        };
+        foreach (Control child in control.Controls)
+            ApplyGameTheme(child);
+    }
+
     # region TELA 1: SELEÇÃO DE MODO
     private void CreateModeSelectionScreen()
     {
         ClearScreen();
 
-        Panel centerFrame = new Panel { Size = new Size(400, 400), BackColor = Color.Transparent };
-        centerFrame.Location = new Point((mainPanel.Width - centerFrame.Width) / 2, (mainPanel.Height - centerFrame.Height) / 2);
-        centerFrame.Anchor = AnchorStyles.None;
-        mainPanel.Controls.Add(centerFrame);
+        TableLayoutPanel stage = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 3,
+            BackColor = ColorTranslator.FromHtml("#10131b"),
+            Padding = new Padding(24, 8, 24, 8)
+        };
+        stage.RowStyles.Add(new RowStyle(SizeType.Absolute, 178));
+        stage.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        stage.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+        mainPanel.Controls.Add(stage);
+
+        TableLayoutPanel hero = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            BackColor = Color.Transparent
+        };
+        hero.RowStyles.Add(new RowStyle(SizeType.Percent, 76));
+        hero.RowStyles.Add(new RowStyle(SizeType.Percent, 24));
+        stage.Controls.Add(hero, 0, 0);
 
         Label lblTitle = new Label
         {
-            Text = "RPG AUTOBATTLER ROGUELIKE",
-            Font = new Font("Arial", 20, FontStyle.Bold),
-            ForeColor = Color.White,
-            Size = new Size(400, 60),
+            Text = "CRÔNICAS\nDO ÚLTIMO DADO",
+            Font = new Font("Segoe UI Black", 27, FontStyle.Bold),
+            ForeColor = ColorTranslator.FromHtml("#f3d58a"),
             TextAlign = ContentAlignment.MiddleCenter,
-            Top = 20
+            Dock = DockStyle.Fill,
+            AutoSize = false
         };
-        centerFrame.Controls.Add(lblTitle);
+        hero.Controls.Add(lblTitle, 0, 0);
 
-        Button btnNormal = new Button
+        Label tagline = new Label
         {
-            Text = "Modo Clássico (Normal)",
-            Font = new Font("Arial", 12, FontStyle.Bold),
-            BackColor = ColorTranslator.FromHtml("#0a6d27"),
-            ForeColor = Color.White,
-            Size = new Size(300, 60),
-            Left = 50,
-            Top = 130,
-            FlatStyle = FlatStyle.Flat
+            Text = "MONTE SEU ESQUADRÃO  •  ENCARE A JORNADA  •  VENÇA NO D20",
+            Font = new Font("Segoe UI Semibold", 11, FontStyle.Bold),
+            ForeColor = ColorTranslator.FromHtml("#8f9aaf"),
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleCenter
         };
-        btnNormal.Click += (s, e) => StartGame("Normal").Wait();
-        centerFrame.Controls.Add(btnNormal);
+        hero.Controls.Add(tagline, 0, 1);
 
-        Button btnHard = new Button
+        TableLayoutPanel modeRow = new TableLayoutPanel
         {
-            Text = "Modo Difícil\n(Permadeath e Críticos 2x)",
-            Font = new Font("Arial", 12, FontStyle.Bold),
-            BackColor = ColorTranslator.FromHtml("#f44336"),
-            ForeColor = Color.White,
-            Size = new Size(300, 60),
-            Left = 50,
-            Top = 210,
-            FlatStyle = FlatStyle.Flat
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Padding = new Padding(90, 24, 90, 24),
+            BackColor = Color.Transparent
         };
-        btnHard.Click += (s, e) => StartGame("Difícil").Wait();
-        centerFrame.Controls.Add(btnHard);
+        modeRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        modeRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        modeRow.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        stage.Controls.Add(modeRow, 0, 1);
+
+        Panel classicCard = new Panel { Dock = DockStyle.Fill, BackColor = ColorTranslator.FromHtml("#19251f"), Margin = new Padding(10) };
+        Panel hardCard = new Panel { Dock = DockStyle.Fill, BackColor = ColorTranslator.FromHtml("#291d22"), Margin = new Padding(10) };
+        modeRow.Controls.Add(classicCard, 0, 0);
+        modeRow.Controls.Add(hardCard, 1, 0);
+
+        void AddModeCard(Panel card, string title, string detail, string buttonText, Color accent, Func<Task> start)
+        {
+            card.Controls.Add(new Panel { Dock = DockStyle.Left, Width = 5, BackColor = accent });
+            TableLayoutPanel content = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 4,
+                Padding = new Padding(20, 10, 20, 10),
+                BackColor = Color.Transparent
+            };
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 44));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
+            content.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            content.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            card.Controls.Add(content);
+
+            content.Controls.Add(new Label { Text = title, Font = new Font("Segoe UI Semibold", 19, FontStyle.Bold), ForeColor = Color.White, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoSize = false }, 0, 0);
+            content.Controls.Add(new Label { Text = detail, Font = new Font("Segoe UI", 10), ForeColor = ColorTranslator.FromHtml("#aeb7c7"), Dock = DockStyle.Fill, TextAlign = ContentAlignment.TopLeft, AutoSize = false, Margin = new Padding(0) }, 0, 1);
+            var actionButton = new Button { Text = buttonText, Font = new Font("Segoe UI Semibold", 11, FontStyle.Bold), BackColor = accent, ForeColor = Color.White, Dock = DockStyle.Fill, AutoSize = false, Margin = new Padding(0) };
+            actionButton.Click += async (_, _) => await start();
+            content.Controls.Add(actionButton, 0, 3);
+        }
+
+        AddModeCard(classicCard, "Jornada clássica", "Uma aventura equilibrada. Heróis nocauteados podem voltar ao combate.", "INICIAR JORNADA", ColorTranslator.FromHtml("#35785b"), () => StartGame("Normal"));
+        AddModeCard(hardCard, "Jornada brutal", "Permadeath e críticos dobrados. Cada rolagem pode mudar tudo.", "ACEITAR O DESAFIO", ColorTranslator.FromHtml("#a84843"), () => StartGame("Difícil"));
+
+        Label footer = new Label { Text = "CINCO ANDARES. UM ESQUADRÃO. UMA CHANCE.", Font = new Font("Segoe UI Semibold", 9, FontStyle.Bold), ForeColor = ColorTranslator.FromHtml("#596477"), Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter };
+        stage.Controls.Add(footer, 0, 2);
     }
 
     private async Task StartGame(string chosenMode)
@@ -176,60 +385,76 @@ public class GameGUI : Form
         ClearScreen();
 
         // Painel Superior
-        Panel topFrame = new Panel { Dock = DockStyle.Top, Height = 60, BackColor = ColorTranslator.FromHtml("#2d2d2d") };
+        Panel topFrame = new Panel { Dock = DockStyle.Top, Height = 72, BackColor = ColorTranslator.FromHtml("#1a202c"), Padding = new Padding(8) };
         mainPanel.Controls.Add(topFrame);
 
         Label infoLbl = new Label
         {
-            Text = $"Missão Atual: Nível {currentLevel}  |  Modo: {mode}  |  💰 Ouro: {gold}g",
-            Font = new Font("Arial", 12, FontStyle.Bold),
-            ForeColor = Color.White,
+            Text = $"ANDAR {currentLevel} / 5     •     {mode.ToUpper()}     •     {gold} OURO",
+            Font = new Font("Segoe UI Semibold", 12, FontStyle.Bold),
+            ForeColor = ColorTranslator.FromHtml("#f3d58a"),
             AutoSize = true,
-            Location = new Point(20, 20)
+            Location = new Point(24, 25)
         };
         topFrame.Controls.Add(infoLbl);
 
+        VectorIcon goldIcon = new(VectorIconKind.Coin, ColorTranslator.FromHtml("#f3d58a"), 22)
+        {
+            Location = new Point(12, 25)
+        };
+        topFrame.Controls.Add(goldIcon);
+
         Button btnMission = new Button
         {
-            Text = "⚔️ IR PARA MISSÃO",
+            Text = "IR PARA MISSÃO",
             Font = new Font("Arial", 10, FontStyle.Bold),
-            BackColor = ColorTranslator.FromHtml("#ff5722"),
+            BackColor = ColorTranslator.FromHtml("#a84843"),
             ForeColor = Color.White,
-            Size = new Size(160, 40),
-            Location = new Point(topFrame.Width - 180, 10),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            Size = new Size(148, 40),
             FlatStyle = FlatStyle.Flat
         };
-        btnMission.Click += (s, e) => CheckGoToMission().Wait();
-        topFrame.Controls.Add(btnMission);
+        btnMission.Click += async (s, e) => await CheckGoToMission();
 
         Button btnReroll = new Button
         {
-            Text = $"🔄 Reroll Loja ({rerollCount}g)",
+            Text = $"REROLL  •  {rerollCount} G",
             Font = new Font("Arial", 10, FontStyle.Regular),
             BackColor = ColorTranslator.FromHtml("#795548"),
             ForeColor = Color.White,
-            Size = new Size(160, 40),
-            Location = new Point(topFrame.Width - 350, 10),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            Size = new Size(164, 40),
             FlatStyle = FlatStyle.Flat
         };
-        btnReroll.Click += (s, e) => RerollShop().Wait();
-        topFrame.Controls.Add(btnReroll);
+        btnReroll.Click += async (s, e) => await RerollShop();
 
         Button btnRestart = new Button
         {
-            Text = $"🔄 Recomeçar",
+            Text = "RECOMEÇAR",
             Font = new Font("Arial", 10, FontStyle.Regular),
             BackColor = ColorTranslator.FromHtml("#4287f5"),
             ForeColor = Color.White,
-            Size = new Size(160, 40),
-            Location = new Point(topFrame.Width - 520, 10),
-            Anchor = AnchorStyles.Top | AnchorStyles.Right,
+            Size = new Size(138, 40),
             FlatStyle = FlatStyle.Flat
         };
         btnRestart.Click += (s, e) => RestartEntireGame();
-        topFrame.Controls.Add(btnRestart);
+
+        FlowLayoutPanel headerActions = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Right,
+            Width = 470,
+            Height = 54,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            Padding = new Padding(0, 7, 4, 0),
+            BackColor = Color.Transparent
+        };
+        headerActions.Controls.Add(btnMission);
+        headerActions.Controls.Add(btnReroll);
+        headerActions.Controls.Add(btnRestart);
+        topFrame.Controls.Add(headerActions);
+        infoLbl.Dock = DockStyle.Fill;
+        infoLbl.AutoSize = false;
+        infoLbl.TextAlign = ContentAlignment.MiddleLeft;
+        infoLbl.Padding = new Padding(38, 0, 0, 0);
 
         // Conteineres do Mercado e Time
         TableLayoutPanel mainLayout = new TableLayoutPanel
@@ -246,26 +471,46 @@ public class GameGUI : Form
         mainLayout.BringToFront();
 
         // Lado Esquerdo: Mercado
-        GroupBox marketFrame = new GroupBox { Text = " Mercado (4 slots) ", Font = new Font("Arial", 11, FontStyle.Bold), ForeColor = Color.White, Dock = DockStyle.Fill };
+        GroupBox marketFrame = new GroupBox { Text = " ✦ RECRUTAMENTO ", Font = new Font("Arial", 11, FontStyle.Bold), ForeColor = Color.White, Dock = DockStyle.Fill, Padding = new Padding(8) };
         mainLayout.Controls.Add(marketFrame, 0, 0);
 
         GroupBox itemFrame = new GroupBox
         {
-            Text = " 🧪 Loja de Itens ",
+            Text = " ✦ RELÍQUIAS ",
             Font = new Font("Arial", 11, FontStyle.Bold),
             ForeColor = ColorTranslator.FromHtml("#ff9800"),
             Dock = DockStyle.Fill
         };
         mainLayout.Controls.Add(itemFrame, 1, 0);
 
-        FlowLayoutPanel itemList = new FlowLayoutPanel
+        Panel itemList = new Panel
         {
             Dock = DockStyle.Fill,
-            FlowDirection = FlowDirection.TopDown,
             AutoScroll = true,
-            Padding = new Padding(8)
+            Padding = Padding.Empty,
+            BackColor = Color.Transparent
         };
         itemFrame.Controls.Add(itemList);
+
+        int itemCardWidth = Math.Max(220, itemList.ClientSize.Width);
+        List<Panel> itemCards = new();
+
+        void ResizeItemCards()
+        {
+            int width = Math.Max(220, itemList.ClientSize.Width - SystemInformation.VerticalScrollBarWidth);
+            for (int i = 0; i < itemCards.Count; i++)
+            {
+                Panel itemPanel = itemCards[i];
+                itemPanel.Width = width;
+                itemPanel.Left = 0;
+                itemPanel.Top = i * 132;
+            }
+
+            int contentHeight = itemCards.Count * 132;
+            itemList.AutoScrollMinSize = new Size(0, Math.Max(contentHeight, itemList.ClientSize.Height));
+        }
+
+        itemList.SizeChanged += (_, _) => ResizeItemCards();
 
         // Cards de itens
         for (int i = 0; i < itemShop.Count; i++)
@@ -275,21 +520,29 @@ public class GameGUI : Form
 
             Panel itemCard = new Panel
             {
-                Size = new Size(190, 100),
-                BackColor = ColorTranslator.FromHtml("#2a2a2a"),
-                Margin = new Padding(0, 5, 0, 5)
+                Size = new Size(itemCardWidth, 122),
+                BackColor = ColorTranslator.FromHtml("#202735"),
+                Margin = Padding.Empty
             };
+            itemCards.Add(itemCard);
             itemList.Controls.Add(itemCard);
 
             if (shopItem == null)
             {
+                VectorIcon soldIcon = new(VectorIconKind.Check, ColorTranslator.FromHtml("#4caf50"), 24)
+                {
+                    Location = new Point(10, 46)
+                };
+                itemCard.Controls.Add(soldIcon);
+
                 Label soldLbl = new Label
                 {
-                    Text = "✅ COMPRADO",
-                    Font = new Font("Arial", 10, FontStyle.Italic),
+                    Text = "COMPRADO",
+                    Font = new Font("Segoe UI", 10, FontStyle.Italic),
                     ForeColor = Color.Gray,
-                    Dock = DockStyle.Fill,
-                    TextAlign = ContentAlignment.MiddleCenter
+                    Location = new Point(40, 48),
+                    Size = new Size(itemCard.Width - 50, 22),
+                    AutoSize = false
                 };
                 itemCard.Controls.Add(soldLbl);
             }
@@ -297,35 +550,54 @@ public class GameGUI : Form
             {
                 Color rarityColor = rarityColors.ContainsKey(shopItem.Rarity) ? rarityColors[shopItem.Rarity] : Color.White;
 
+                Panel itemHeader = new Panel
+                {
+                    Location = new Point(8, 4),
+                    Size = new Size(itemCard.Width - 16, 34),
+                    BackColor = Color.Transparent
+                };
+
+                VectorIcon itemIcon = new VectorIcon(GetItemIconKind(shopItem), rarityColor, 26)
+                {
+                    Location = new Point(0, 4)
+                };
+                itemHeader.Controls.Add(itemIcon);
+
                 Label nameLbl = new Label
                 {
-                    Text = $"{shopItem.Emoji} {shopItem.Name}",
-                    Font = new Font("Arial", 9, FontStyle.Bold),
+                    Text = shopItem.Name,
+                    Font = new Font("Segoe UI Semibold", 9.5f, FontStyle.Bold),
                     ForeColor = rarityColor,
-                    Location = new Point(5, 5),
-                    Size = new Size(180, 20)
+                    Location = new Point(34, 0),
+                    Size = new Size(itemHeader.Width - 34, 34),
+                    AutoSize = false,
+                    TextAlign = ContentAlignment.MiddleLeft
                 };
-                itemCard.Controls.Add(nameLbl);
+                itemHeader.Controls.Add(nameLbl);
+
+                itemCard.Controls.Add(itemHeader);
 
                 Label descLbl = new Label
                 {
                     Text = shopItem.Description,
-                    Font = new Font("Arial", 8),
+                    Font = new Font("Segoe UI", 8.5f),
                     ForeColor = ColorTranslator.FromHtml("#cccccc"),
-                    Location = new Point(5, 25),
-                    Size = new Size(180, 35),
-                    AutoEllipsis = true
+                    Location = new Point(8, 36),
+                    Size = new Size(itemCard.Width - 16, 48),
+                    AutoSize = false
                 };
                 itemCard.Controls.Add(descLbl);
 
                 Button btnBuyItem = new Button
                 {
-                    Text = $"🪙 {shopItem.Cost}g  Comprar",
+                    Text = $"COMPRAR  •  {shopItem.Cost} G",
+                    Image = VectorIcon.CreateBitmap(VectorIconKind.Coin, Color.White, 18, ColorTranslator.FromHtml("#795548")),
+                    ImageAlign = ContentAlignment.MiddleLeft,
                     BackColor = ColorTranslator.FromHtml("#795548"),
                     ForeColor = Color.White,
-                    Font = new Font("Arial", 8, FontStyle.Bold),
+                    Font = new Font("Segoe UI Semibold", 8.5f, FontStyle.Bold),
                     Dock = DockStyle.Bottom,
-                    Height = 28,
+                    Height = 30,
                     FlatStyle = FlatStyle.Flat
                 };
                 btnBuyItem.Click += (s, e) => BuyItem(itemIdx).Wait();
@@ -336,16 +608,19 @@ public class GameGUI : Form
         // Exibe itens já comprados nesta run
         if (purchasedItems.Count > 0)
         {
+            int ownedTop = itemCards.Count * 132;
+
             Label ownedTitle = new Label
             {
                 Text = "── Itens Ativos ──",
                 Font = new Font("Arial", 8, FontStyle.Italic),
                 ForeColor = Color.Gray,
                 AutoSize = true,
-                Margin = new Padding(0, 8, 0, 2)
+                Location = new Point(0, ownedTop + 4)
             };
             itemList.Controls.Add(ownedTitle);
 
+            int ownedIndex = 0;
             foreach (var owned in purchasedItems)
             {
                 Label ownedLbl = new Label
@@ -354,11 +629,18 @@ public class GameGUI : Form
                     Font = new Font("Arial", 8),
                     ForeColor = ColorTranslator.FromHtml("#4caf50"),
                     AutoSize = true,
-                    Margin = new Padding(2, 1, 0, 1)
+                    Location = new Point(2, ownedTop + 26 + ownedIndex * 22)
                 };
                 itemList.Controls.Add(ownedLbl);
+                ownedIndex++;
             }
+
+            itemList.AutoScrollMinSize = new Size(
+                0,
+                Math.Max(itemCards.Count * 132 + 26 + purchasedItems.Count * 22, itemList.ClientSize.Height));
         }
+
+        ResizeItemCards();
 
         TableLayoutPanel marketGrid = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 2, Padding = new Padding(10) };
         marketGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
@@ -372,13 +654,55 @@ public class GameGUI : Form
             int index = i;
             Agent agent = market[i];
 
-            Panel card = new Panel { Dock = DockStyle.Fill, BackColor = ColorTranslator.FromHtml("#2a2a2a"), Margin = new Padding(5) };
+            Panel card = new Panel { Dock = DockStyle.Fill, BackColor = ColorTranslator.FromHtml("#202735"), Margin = new Padding(7), Padding = new Padding(4) };
             marketGrid.Controls.Add(card, i % 2, i / 2);
 
             if (agent == null)
             {
-                Label lbl = new Label { Text = "✅ COMPRADO ", Font = new Font("Arial", 11, FontStyle.Italic), ForeColor = Color.Gray, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter };
-                card.Controls.Add(lbl);
+                TableLayoutPanel purchasedLayout = new TableLayoutPanel
+                {
+                    Dock = DockStyle.Fill,
+                    ColumnCount = 3,
+                    RowCount = 1,
+                    BackColor = Color.Transparent,
+                    Margin = Padding.Empty,
+                    Padding = Padding.Empty
+                };
+                purchasedLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+                purchasedLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+                purchasedLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50f));
+
+                FlowLayoutPanel purchasedContent = new FlowLayoutPanel
+                {
+                    AutoSize = true,
+                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                    FlowDirection = FlowDirection.LeftToRight,
+                    WrapContents = false,
+                    BackColor = Color.Transparent,
+                    Margin = Padding.Empty,
+                    Padding = Padding.Empty,
+                    Anchor = AnchorStyles.None
+                };
+
+                purchasedContent.Controls.Add(new VectorIcon(
+                    VectorIconKind.Check,
+                    ColorTranslator.FromHtml("#4caf50"),
+                    24)
+                {
+                    Margin = new Padding(0, 0, 4, 0)
+                });
+
+                purchasedContent.Controls.Add(new Label
+                {
+                    Text = "COMPRADO",
+                    Font = new Font("Segoe UI", 11, FontStyle.Italic),
+                    ForeColor = Color.Gray,
+                    AutoSize = true,
+                    Margin = new Padding(0, 2, 0, 0)
+                });
+
+                purchasedLayout.Controls.Add(purchasedContent, 1, 0);
+                card.Controls.Add(purchasedLayout);
             }
             else
             {
@@ -391,7 +715,7 @@ public class GameGUI : Form
                     ForeColor = rarityColor,
                     TextAlign = ContentAlignment.TopCenter,
                     Dock = DockStyle.Top,
-                    Height = 35
+                    Height = 42
                 };
                 card.Controls.Add(titleLbl);
 
@@ -400,28 +724,34 @@ public class GameGUI : Form
                     Image = await _agentService.GetAgentImage(agent, new Size(90, 90)),
                     Size = new Size(90, 90),
                     SizeMode = PictureBoxSizeMode.CenterImage,
-                    Left = (card.Width - 90) / 2,
-                    Top = 40,
+                    Left = 0,
+                    Top = 48,
                     Anchor = AnchorStyles.Top
                 };
+                void CenterPortrait(object? sender, EventArgs e) => pb.Left = Math.Max(0, (card.ClientSize.Width - pb.Width) / 2);
+                card.SizeChanged += CenterPortrait;
+                CenterPortrait(card, EventArgs.Empty);
                 card.Controls.Add(pb);
-
-                string statsStr = mode == "Difícil" ?
-                    $"🪙 {agent.Rarity}g\n⚔️ ATK: ?  🛡️ DEF: ?\n🎯 PER: ?  ❤️ HP: {agent.MaxLife}" :
-                    $"🪙 {agent.Rarity}g\n⚔️ ATK: {agent.BaseAttack}  🛡️ DEF: {agent.BaseDefense}\n🎯 PER: {agent.BaseSkill}  ❤️ HP: {agent.MaxLife}";
 
                 Label statsLbl = new Label
                 {
-                    Text = statsStr,
+                    Text = string.Empty,
                     Font = new Font("Arial", 9),
                     ForeColor = ColorTranslator.FromHtml("#bbbbbb"),
                     TextAlign = ContentAlignment.MiddleCenter,
-                    Location = new Point(0, 135),
-                    Width = card.Width,
+                    Location = new Point(0, 142),
+                    Width = card.ClientSize.Width,
                     Height = 55,
                     Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
                 };
+                statsLbl.Visible = false;
                 card.Controls.Add(statsLbl);
+
+                TableLayoutPanel statsGrid = CreateMarketStats(agent, mode == "Difícil");
+                statsGrid.Location = new Point(14, 140);
+                statsGrid.Size = new Size(Math.Max(180, card.ClientSize.Width - 28), 60);
+                statsGrid.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+                card.Controls.Add(statsGrid);
 
                 var synergyStr = await _agentService.GetSynergyName(agent);
 
@@ -431,19 +761,29 @@ public class GameGUI : Form
                     Font = new Font("Arial", 9, FontStyle.Italic),
                     ForeColor = ColorTranslator.FromHtml("#ff9800"),
                     TextAlign = ContentAlignment.MiddleCenter,
-                    Location = new Point(0, 195),
-                    Width = card.Width,
+                    Location = new Point(0, 202),
+                    Width = card.ClientSize.Width,
                     Height = 30,
                     Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
                 };
+                void ResizeStats(object? sender, EventArgs e)
+                {
+                    statsLbl.Width = card.ClientSize.Width;
+                    synergyLbl.Width = card.ClientSize.Width;
+                    CenterPortrait(sender, e);
+                }
+                card.SizeChanged += ResizeStats;
+                ResizeStats(card, EventArgs.Empty);
                 card.Controls.Add(synergyLbl);
 
                 Button btnBuy = new Button
                 {
-                    Text = "Comprar",
+                    Text = $"COMPRAR  •  {agent.Rarity} G",
+                    Image = VectorIcon.CreateBitmap(VectorIconKind.Coin, Color.White, 18, ColorTranslator.FromHtml("#4caf50")),
+                    ImageAlign = ContentAlignment.MiddleLeft,
                     BackColor = ColorTranslator.FromHtml("#4caf50"),
                     ForeColor = Color.White,
-                    Font = new Font("Arial", 9, FontStyle.Bold),
+                    Font = new Font("Segoe UI Semibold", 8.5f, FontStyle.Bold),
                     Dock = DockStyle.Bottom,
                     Height = 30,
                     FlatStyle = FlatStyle.Flat
@@ -454,7 +794,7 @@ public class GameGUI : Form
         }
 
         // Lado Direito: Sua Equipe
-        GroupBox teamFrame = new GroupBox { Text = " Sua Equipe (Mín 1 / Máx 5) ", Font = new Font("Arial", 11, FontStyle.Bold), ForeColor = Color.White, Dock = DockStyle.Fill };
+        GroupBox teamFrame = new GroupBox { Text = $" ✦ SEU ESQUADRÃO  {team.Count}/5 ", Font = new Font("Arial", 11, FontStyle.Bold), ForeColor = Color.White, Dock = DockStyle.Fill };
         mainLayout.Controls.Add(teamFrame, 2, 0);
 
         FlowLayoutPanel teamList = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, AutoScroll = true, Padding = new Padding(10) };
@@ -471,22 +811,36 @@ public class GameGUI : Form
             int index = i;
             Agent agent = team[i];
 
-            Panel card = new Panel { Size = new Size(360, 60), BackColor = ColorTranslator.FromHtml("#333333"), Margin = new Padding(0, 5, 0, 5) };
+            Panel card = new Panel { Size = new Size(Math.Max(300, teamList.ClientSize.Width - 24), 88), BackColor = ColorTranslator.FromHtml("#202735"), Margin = new Padding(0, 6, 0, 6) };
             teamList.Controls.Add(card);
+
+            teamList.SizeChanged += (_, _) => card.Width = Math.Max(280, teamList.ClientSize.Width - 24);
 
             PictureBox pb = new PictureBox { Image = await _agentService.GetAgentImage(agent, new Size(45, 45)), Size = new Size(45, 45), Location = new Point(5, 7) };
             card.Controls.Add(pb);
 
             Color rarityColor = rarityColors.ContainsKey(agent.Rarity) ? rarityColors[agent.Rarity] : Color.White;
-            Label titleLbl = new Label { Text = $"{agent.Name} ({AgentHelper.MappingTypes(agent.Type)})", Font = new Font("Arial", 10, FontStyle.Bold), ForeColor = rarityColor, Location = new Point(55, 5), AutoSize = true };
+            Label titleLbl = new Label { Text = $"{agent.Name} ({AgentHelper.MappingTypes(agent.Type)})", Font = new Font("Arial", 10, FontStyle.Bold), ForeColor = rarityColor, Location = new Point(55, 5), Size = new Size(Math.Max(100, card.Width - 130), 22), AutoEllipsis = true, Anchor = AnchorStyles.Top | AnchorStyles.Left };
             card.Controls.Add(titleLbl);
 
             string hpStr = $"❤️ Vida: {agent.CurrentLife}/{agent.MaxLife}";
-            Label statsLbl = new Label { Text = $"{hpStr} | ⚔️ ATK:{agent.BaseAttack} 🛡️ DEF:{agent.BaseDefense} 🎯 PER:{agent.BaseSkill}", Font = new Font("Arial", 8.5f), ForeColor = Color.White, Location = new Point(55, 28), AutoSize = true };
+            Label statsLbl = new Label
+            {
+                Text = string.Empty,
+                Visible = false,
+                Location = new Point(55, 29),
+                Size = new Size(Math.Max(100, card.Width - 130), 34)
+            };
             card.Controls.Add(statsLbl);
 
+            TableLayoutPanel teamStatsGrid = CreateTeamStats(agent);
+            teamStatsGrid.Location = new Point(55, 28);
+            teamStatsGrid.Size = new Size(Math.Max(100, card.Width - 130), 34);
+            teamStatsGrid.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            card.Controls.Add(teamStatsGrid);
+
             string synergyName = await _agentService.GetSynergyName(agent);
-            Label synergyLbl = new Label { Text = $"{synergyName}", Font = new Font("Arial", 8.5f), ForeColor = Color.Orange, Location = new Point(55, 43), AutoSize = true };
+            Label synergyLbl = new Label { Text = $"{synergyName}", Font = new Font("Segoe UI", 8.5f, FontStyle.Italic), ForeColor = Color.Orange, Location = new Point(55, 64), Size = new Size(Math.Max(100, card.Width - 130), 20), AutoSize = false, Anchor = AnchorStyles.Top | AnchorStyles.Left };
             card.Controls.Add(synergyLbl);
 
             Button btnSell = new Button
@@ -496,11 +850,69 @@ public class GameGUI : Form
                 ForeColor = Color.White,
                 Font = new Font("Arial", 8, FontStyle.Bold),
                 Size = new Size(55, 30),
-                Location = new Point(300, 15),
+                Location = new Point(card.Width - 60, 29),
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 FlatStyle = FlatStyle.Flat
             };
             btnSell.Click += (s, e) => SellAgent(index).Wait();
             card.Controls.Add(btnSell);
+
+            void ResizeTeamCard(object? sender, EventArgs e)
+            {
+                int textWidth = Math.Max(100, card.ClientSize.Width - 130);
+                titleLbl.Width = textWidth;
+                statsLbl.Width = textWidth;
+                synergyLbl.Width = textWidth;
+                btnSell.Left = card.ClientSize.Width - btnSell.Width - 5;
+            }
+
+            card.SizeChanged += ResizeTeamCard;
+            ResizeTeamCard(card, EventArgs.Empty);
+        }
+
+        // Exibe as sinergias que estão ativas no esquadrão.
+        List<string> activeSynergies = await _agentService.GetActiveSynergies(team);
+
+        if (activeSynergies.Count > 0)
+        {
+            Label synergyTitle = new Label
+            {
+                Text = "── Sinergias Ativas ──",
+                Font = new Font("Segoe UI", 8, FontStyle.Italic),
+                ForeColor = ColorTranslator.FromHtml("#d7b56d"),
+                AutoSize = true,
+                Margin = new Padding(0, 8, 0, 2)
+            };
+            teamList.Controls.Add(synergyTitle);
+
+            foreach (string synergy in activeSynergies)
+            {
+                FlowLayoutPanel synergyRow = new FlowLayoutPanel
+                {
+                    AutoSize = true,
+                    WrapContents = false,
+                    FlowDirection = FlowDirection.LeftToRight,
+                    Margin = new Padding(2, 1, 0, 1),
+                    Padding = Padding.Empty,
+                    BackColor = Color.Transparent
+                };
+
+                synergyRow.Controls.Add(new VectorIcon(
+                    VectorIconKind.Sparkles,
+                    ColorTranslator.FromHtml("#ff9800"),
+                    16));
+
+                synergyRow.Controls.Add(new Label
+                {
+                    Text = synergy,
+                    Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                    ForeColor = ColorTranslator.FromHtml("#ff9800"),
+                    AutoSize = true,
+                    Margin = new Padding(2, 1, 0, 0)
+                });
+
+                teamList.Controls.Add(synergyRow);
+            }
         }
     }
 
@@ -595,7 +1007,7 @@ public class GameGUI : Form
         falhas = 0;
         testeNum = 1;
 
-        Panel battleFrame = new Panel { Dock = DockStyle.Fill, BackColor = ColorTranslator.FromHtml("#121212"), Padding = new Padding(20) };
+        Panel battleFrame = new Panel { Dock = DockStyle.Fill, BackColor = ColorTranslator.FromHtml("#10131b"), Padding = new Padding(28) };
         mainPanel.Controls.Add(battleFrame);
 
         // --- CONTROLES COM DOCK TOP (A ordem de adição importa!) ---
@@ -605,7 +1017,7 @@ public class GameGUI : Form
         {
             Text = $"🚨 MISSÃO NÍVEL {currentLevel} | TEMA: {currentTheme.ToUpper()} 🚨",
             Font = new Font("Arial", 14, FontStyle.Bold),
-            ForeColor = ColorTranslator.FromHtml("#ff9800"),
+            ForeColor = ColorTranslator.FromHtml("#f3d58a"),
             TextAlign = ContentAlignment.MiddleCenter,
             Dock = DockStyle.Top,
             Height = 35
@@ -643,7 +1055,7 @@ public class GameGUI : Form
         {
             Size = new Size(80, 80),
             SizeMode = PictureBoxSizeMode.CenterImage,
-            Location = new Point((this.Width - 80) / 2, 120),
+            Location = new Point(Math.Max(0, (battleFrame.ClientSize.Width - 80) / 2), 120),
             Anchor = AnchorStyles.Top
         };
         battleFrame.Controls.Add(pbBattleHero);
@@ -655,7 +1067,7 @@ public class GameGUI : Form
             Font = new Font("Consolas", 10),
             ReadOnly = true,
             Location = new Point(20, 210),
-            Width = this.Width - 60,
+            Width = Math.Max(400, battleFrame.ClientSize.Width - 40),
             Height = 210,
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
         };
@@ -664,12 +1076,14 @@ public class GameGUI : Form
         // Botão de Rolar Dados
         btnRoll = new Button
         {
-            Text = "🎲 ROLAR DADO (TESTE 1/5)",
+            Text = "ROLAR DADO (TESTE 1/5)",
+            Image = VectorIcon.CreateBitmap(VectorIconKind.Dice, Color.White, 24, ColorTranslator.FromHtml("#e91e63")),
+            ImageAlign = ContentAlignment.MiddleLeft,
             Font = new Font("Arial", 12, FontStyle.Bold),
             BackColor = ColorTranslator.FromHtml("#e91e63"),
             ForeColor = Color.White,
-            Size = new Size(400, 50),
-            Location = new Point((this.Width - 400) / 2, 440),
+            Size = new Size(360, 50),
+            Location = new Point(Math.Max(0, (battleFrame.ClientSize.Width - 360) / 2), 440),
             Anchor = AnchorStyles.Top,
             FlatStyle = FlatStyle.Flat
         };
@@ -718,7 +1132,7 @@ public class GameGUI : Form
         var setValueExibition = currentTheme == Agent.Ataque ? bestHero.BaseAttack : currentTheme == Agent.Defesa ? bestHero.BaseDefense : bestHero.BaseSkill;
 
         lblHeroStats.Text = $"{currentTheme}: {setValueExibition} Fadiga: {bestHero.Fatigue.FirstOrDefault(f => f.Key == currentTheme).Value}";
-        btnRoll.Text = $"🎲 ROLAR PARA {bestHero.Name.ToUpper()} (Total: {bestVal}) [Teste {testeNum}/5]";
+        btnRoll.Text = $"ROLAR PARA {bestHero.Name.ToUpper()} (Total: {bestVal}) [Teste {testeNum}/5]";
         pbBattleHero.Image = await _agentService.GetAgentImage(bestHero, new Size(80, 80));
     }
 
@@ -914,9 +1328,10 @@ public class GameGUI : Form
             Text = gameEvent.Name,
             Font = new Font("Arial", 17, FontStyle.Bold),
             ForeColor = Color.White,
-            Size = new Size(560, 40),
+            Size = new Size(560, 52),
             TextAlign = ContentAlignment.MiddleCenter,
-            Location = new Point(7, 38)
+            Location = new Point(7, 38),
+            AutoSize = false
         };
         innerBorder.Controls.Add(lblTitle);
 
@@ -935,9 +1350,10 @@ public class GameGUI : Form
             Text = gameEvent.Description,
             Font = new Font("Arial", 10),
             ForeColor = ColorTranslator.FromHtml("#cccccc"),
-            Size = new Size(540, 80),
+            Size = new Size(540, 88),
             TextAlign = ContentAlignment.MiddleCenter,
-            Location = new Point(27, 92)
+            Location = new Point(27, 94),
+            AutoSize = false
         };
         innerBorder.Controls.Add(lblDesc);
 
@@ -963,8 +1379,8 @@ public class GameGUI : Form
                 Font = new Font("Arial", 10, FontStyle.Bold),
                 BackColor = optionColors[i],
                 ForeColor = Color.White,
-                Size = new Size(520, 52),
-                Location = new Point(37, 190 + i * 66),
+                Size = new Size(520, 62),
+                Location = new Point(37, 190 + i * 72),
                 FlatStyle = FlatStyle.Flat,
                 TextAlign = ContentAlignment.MiddleLeft,
                 Padding = new Padding(8, 0, 0, 0)

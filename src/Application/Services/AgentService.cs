@@ -152,6 +152,50 @@ namespace RPGBattleMaker.Application.Services
 
             return bonus;
         }
+
+        public async Task<List<string>> GetActiveSynergies(List<Agent> teamAgents)
+        {
+            if (teamAgents.Count == 0)
+                return new List<string>();
+
+            var teamSynergies = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var agent in teamAgents)
+                teamSynergies[agent.Name] = await _agentRepository.GetHeroSynergies(agent.Id);
+
+            var allSynergies = teamSynergies.Values
+                .SelectMany(x => x)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x)
+                .ToList();
+
+            List<string> active = new();
+
+            foreach (var synergyName in allSynergies)
+            {
+                int count = teamSynergies.Values.Count(synergies =>
+                    synergies.Contains(synergyName, StringComparer.OrdinalIgnoreCase));
+
+                bool isActive =
+                    synergyName.Equals("Solo", StringComparison.OrdinalIgnoreCase)
+                        ? teamAgents.Count == 1
+                        : synergyName.Equals("Irmãos", StringComparison.OrdinalIgnoreCase) ||
+                          synergyName.Equals("Irmãs", StringComparison.OrdinalIgnoreCase)
+                            ? count >= 2
+                            : synergyName.Equals("Amor", StringComparison.OrdinalIgnoreCase) ||
+                              synergyName.Equals("Amor Platônico", StringComparison.OrdinalIgnoreCase) ||
+                              synergyName.Equals("Casal Real", StringComparison.OrdinalIgnoreCase) ||
+                              synergyName.Equals("Vilão", StringComparison.OrdinalIgnoreCase)
+                                ? count >= 2
+                                : count >= 2;
+
+                if (isActive)
+                    active.Add(synergyName);
+            }
+
+            return active;
+        }
     }
 }
 
