@@ -11,50 +11,115 @@ namespace RPGBattleMaker.Infrastructure.AI;
 public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
 {
     private const string ModelFileName = "Llama-3.2-3B-Instruct-Q4_K_M.gguf";
+    private const uint ModelContextSize = 4096;
+
+    // Mantemos o contexto do modelo maior, mas não deixamos a memória narrativa
+    // crescer indefinidamente. Quando a história bruta passa desse limite,
+    // os capítulos antigos são compactados em uma crônica curta.
+    private const int NarrativeMemoryThresholdChars = 7000;
+    private const int RecentStoriesToKeep = 2;
+    private const int RecentEventsToKeep = 1;
 
     private readonly SemaphoreSlim _generationLock = new(1, 1);
+    private readonly SemaphoreSlim _memoryLock = new(1, 1);
     private LLamaWeights? _model;
     private string? _loadedModelPath;
     private bool _initializationAttempted;
 
+    private string _adventureChronicle = string.Empty;
+    private int _summarizedStoryCount;
+    private int _summarizedEventCount;
+
     public async Task<BattleStory?> GenerateInitialAsync(
         int level,
-        IReadOnlyCollection<string> previousStories)
+        IReadOnlyCollection<string> previousStories,
+        IReadOnlyCollection<string> recentEvents)
     {
-        string previousText = previousStories.Count == 0
-            ? "Esta é a primeira cena da jornada. Ainda não existe história anterior."
-            : string.Join(
-                Environment.NewLine,
-                previousStories.TakeLast(8).Select((story, index) =>
-                    $"{index + 1}. {story}"));
+        string narrativeMemory = await PrepareNarrativeMemoryAsync(
+            previousStories,
+            recentEvents);
 
-        BattleStory? story = await GeneratePromptAsync($"""
+        const string introductionSystemPrompt =
+            "Você é o narrador principal de uma aventura de roguelike medieval chamada RPG Battle Maker. " +
+            "Responda SOMENTE com um objeto JSON válido, sem markdown e sem texto adicional. " +
+            "O JSON deve conter exatamente duas propriedades: title e narrative. " +
+            "As duas propriedades devem ser strings. " +
+            "title deve ser curto e evocativo. " +
+            "Para uma introdução de nível, escreva exatamente 4 frases objetivas e concretas. " +
+            "A primeira frase deve dizer o que a party estava fazendo ou perseguindo. A segunda deve explicar como chegou ao local. " +
+            "A terceira deve mostrar o que encontrou e qual é a ameaça. A quarta deve explicar por que o conflito começa agora. " +
+            "Não comece com clima, silêncio, sombras ou tensão antes de explicar a situação. Em níveis posteriores, continue diretamente a história anterior " +
+            "e preserve personagens, lugares, ameaças e consequências já estabelecidas. " +
+            "Não invente números ou resultados mecânicos.";
+
+        BattleStory? story = await GeneratePromptAsync(
+            $"""
             ABERTURA DO NÍVEL {level}
 
-            Esta não é uma nova história. Continue a mesma jornada exatamente de onde a narrativa anterior terminou.
-            Crie a cena introdutória do novo combate de um roguelike medieval.
-            A cena deve preparar o jogador para rolar o primeiro D20 deste nível.
-            Mantenha personagens, acontecimentos, ameaças e clima narrativo já estabelecidos sempre que fizer sentido.
-            Não apague, reinicie ou contradiga a história anterior.
-            Não invente uma nova missão separada.
-            Termine com uma sensação clara de que o combate deste novo nível está prestes a começar.
+            Esta é uma continuação da mesma aventura.
+            Antes de chegar ao combate, dê ao jogador um contexto maior sobre como a party chegou até aqui.
+            Siga obrigatoriamente esta ordem causal:
+            1. o que a party estava fazendo ou perseguindo;
+            2. como e por que chegou ao local atual;
+            3. o que encontrou ali e qual é a ameaça;
+            4. por que o conflito começa agora.
+            Não comece pela atmosfera. O leitor precisa entender primeiro por que a party está ali.
+            Não crie uma missão paralela desconectada.
+            Termine com a party diante do confronto, pronta para rolar o primeiro D20.
 
-            HISTÓRIA ANTERIOR:
-            {previousText}
+            MEMÓRIA DA AVENTURA:
+            {narrativeMemory}
 
-            Continue a partir do último acontecimento narrado.
-            """);
+            Continue exatamente a partir do último acontecimento narrado.
+            """,
+            maxTokens: 220,
+            temperature: 0.30f,
+            systemPromptOverride: introductionSystemPrompt,
+            maxNarrativeLength: 900);
 
-        return story ?? new BattleStory(
-            level == 1 ? "A Batalha se Aproxima" : "A Jornada Continua",
-            level == 1
-                ? "O ar pesa enquanto a estrada desaparece sob sombras e o silêncio da região anuncia perigo. Os heróis se preparam para agir, e o próximo lançamento do D20 decidirá o primeiro movimento da batalha."
-                : "A jornada avança para um novo confronto, carregando as marcas dos acontecimentos anteriores. Os heróis se aproximam do próximo campo de batalha, onde uma nova rolagem decidirá o rumo da aventura.");
+        if (story is not null)
+            return story;
+
+        // Última tentativa exclusiva da introdução: reduzimos o pedido ao essencial
+        // para que uma resposta AI completa tenha prioridade sobre qualquer fallback fixo.
+        const string compactIntroductionSystemPrompt =
+            "Você é o narrador de uma aventura medieval. " +
+            "Responda SOMENTE com JSON válido contendo title e narrative. " +
+            "Escreva exatamente 4 frases curtas em português do Brasil. " +
+            "Frase 1: objetivo da party. Frase 2: como chegou ao local. " +
+            "Frase 3: o que encontrou e a ameaça. Frase 4: por que o combate começa agora. " +
+            "Não comece com atmosfera genérica e não invente números ou mecânicas.";
+
+        BattleStory? compactStory = await GeneratePromptAsync(
+            $"""
+            ABERTURA DO NÍVEL {level}
+
+            MEMÓRIA DA AVENTURA:
+            {narrativeMemory}
+
+            Escreva uma introdução causal em exatamente 4 frases.
+            """,
+            maxTokens: 170,
+            temperature: 0.20f,
+            systemPromptOverride: compactIntroductionSystemPrompt,
+            maxNarrativeLength: 700);
+
+        if (compactStory is not null)
+            return compactStory;
+
+        // Não inventamos uma narrativa local. Se o modelo realmente não respondeu,
+        // o caller recebe null e pode informar que a geração falhou.
+        return null;
     }
 
     public async Task<BattleStory?> GenerateAsync(BattleNarrativeContext context)
     {
-        BattleStory? story = await GeneratePromptAsync(BuildPrompt(context));
+        string narrativeMemory = await PrepareNarrativeMemoryAsync(
+            context.PreviousStories,
+            Array.Empty<string>());
+
+        BattleStory? story = await GeneratePromptAsync(
+            BuildPrompt(context, narrativeMemory));
 
         return story ?? new BattleStory(
             $"A Batalha Continua",
@@ -71,19 +136,9 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
         IReadOnlyCollection<string> previousStories,
         IReadOnlyCollection<string> recentEvents)
     {
-        string previousText = previousStories.Count == 0
-            ? "Nenhuma narrativa anterior."
-            : string.Join(
-                Environment.NewLine,
-                previousStories.TakeLast(6).Select((story, index) =>
-                    $"{index + 1}. {story}"));
-
-        string eventsText = recentEvents.Count == 0
-            ? "Nenhum evento relevante."
-            : string.Join(
-                Environment.NewLine,
-                recentEvents.TakeLast(4).Select((eventStory, index) =>
-                    $"{index + 1}. {eventStory}"));
+        string narrativeMemory = await PrepareNarrativeMemoryAsync(
+            previousStories,
+            recentEvents);
 
         string teamText = team.Count == 0
             ? "A equipe não possui heróis vivos."
@@ -118,11 +173,8 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
 
             {result}
 
-            HISTÓRIA ANTERIOR:
-            {previousText}
-
-            EVENTOS DA JORNADA:
-            {eventsText}
+            MEMÓRIA DA AVENTURA:
+            {narrativeMemory}
 
             ESTADO FINAL DA PARTY:
             {teamText}
@@ -151,15 +203,50 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             systemPromptOverride: conclusionSystemPrompt,
             maxNarrativeLength: 1800);
 
-        return story ?? new BattleStory(
+        if (story is not null)
+            return story;
+
+        // Retry with the already compacted narrative memory so the final scene still gets a fresh AI ending.
+        string compactPrompt = $"""
+            CONCLUSÃO FINAL DO NÍVEL {level}
+
+            Resultado obrigatório: {(success ? "VITÓRIA DA PARTY" : "DERROTA DA PARTY")}.
+            Sucessos: {successes}.
+            Falhas: {failures}.
+
+            Escreva o desfecho definitivo deste combate.
+            A história termina agora e deve fechar o arco deste nível.
+            {(success
+                ? "A party derrota a ameaça e conclui o objetivo do nível com uma vitória."
+                : "A party é derrotada pela ameaça e a jornada termina aqui.")}
+            Não deixe o combate em aberto e não anuncie um próximo momento decisivo.
+
+            MEMÓRIA COMPACTADA DA AVENTURA:
+            {narrativeMemory}
+
+            ESTADO DA PARTY:
+            {teamText}
+            """;
+
+        story = await GeneratePromptAsync(
+            compactPrompt,
+            maxTokens: 320,
+            temperature: 0.28f,
+            systemPromptOverride: conclusionSystemPrompt,
+            maxNarrativeLength: 1400);
+
+        if (story is not null)
+            return story;
+
+        return new BattleStory(
             success ? $"Vitória no Nível {level}" : "A Queda da Party",
             success
-                ? "Com o conflito finalmente superado, a party permanece de pé e o nível termina em vitória. As marcas da batalha seguem com os heróis enquanto a jornada continua para o próximo desafio."
-                : "A batalha chega ao fim com a party derrotada pelas consequências do confronto. Sem forças para continuar, a jornada termina aqui.");
+                ? "A conclusão narrativa automática falhou, mas o sistema confirmou a vitória da party neste nível."
+                : "A conclusão narrativa automática falhou, mas o sistema confirmou a derrota da party neste nível.");
     }
 
     public async Task<Event?> GenerateEventAsync(
-        Event mechanicsTemplate,
+        int mechanicsId,
         IReadOnlyList<Agent> team,
         IReadOnlyList<Item> items,
         int level,
@@ -167,6 +254,10 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
         IReadOnlyCollection<string> previousBattleStories,
         IReadOnlyCollection<string> recentEvents)
     {
+        string narrativeMemory = await PrepareNarrativeMemoryAsync(
+            previousBattleStories,
+            recentEvents);
+
         await _generationLock.WaitAsync();
 
         try
@@ -179,8 +270,8 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
                 items,
                 level,
                 gold,
-                previousBattleStories,
-                recentEvents);
+                mechanicsId,
+                narrativeMemory);
 
             const string systemPrompt =
                 "Você é o bardo narrador de eventos de um roguelike medieval chamado RPG Battle Maker. " +
@@ -198,7 +289,7 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
                 diagnosticPrefix: "event",
                 parser: response => ParseEventResponse(
                     response,
-                    mechanicsTemplate.Id));
+                    mechanicsId));
         }
         catch (Exception exception)
         {
@@ -269,8 +360,12 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
+            int timeoutSeconds = maxTokens <= 200
+                ? (attempt == 1 ? 15 : 8)
+                : (attempt == 1 ? 25 : 12);
+
             using CancellationTokenSource timeout =
-                new(TimeSpan.FromSeconds(attempt == 1 ? 15 : 8));
+                new(TimeSpan.FromSeconds(timeoutSeconds));
 
             string attemptPrompt = attempt == 1
                 ? prompt
@@ -335,7 +430,7 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
 
             ModelParams parameters = new(modelPath)
             {
-                ContextSize = 1024,
+                ContextSize = ModelContextSize,
                 GpuLayerCount = 99
             };
 
@@ -366,7 +461,7 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
         {
             ModelParams parameters = new(_loadedModelPath)
             {
-                ContextSize = 1024,
+                ContextSize = ModelContextSize,
                 GpuLayerCount = 99
             };
 
@@ -428,7 +523,173 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
         }
     }
 
-    private static string BuildPrompt(BattleNarrativeContext context)
+    private async Task<string> PrepareNarrativeMemoryAsync(
+        IReadOnlyCollection<string> stories,
+        IReadOnlyCollection<string> events)
+    {
+        await _memoryLock.WaitAsync();
+
+        try
+        {
+            // O mesmo narrator é singleton. Quando as listas voltam a zero,
+            // significa que uma nova partida começou e a crônica antiga deve ser descartada.
+            if (stories.Count == 0 && events.Count == 0)
+            {
+                _adventureChronicle = string.Empty;
+                _summarizedStoryCount = 0;
+                _summarizedEventCount = 0;
+            }
+            else if (stories.Count < _summarizedStoryCount ||
+                     events.Count < _summarizedEventCount)
+            {
+                _adventureChronicle = string.Empty;
+                _summarizedStoryCount = 0;
+                _summarizedEventCount = 0;
+            }
+
+            int storyBoundary = Math.Max(0, stories.Count - RecentStoriesToKeep);
+            int eventBoundary = Math.Max(0, events.Count - RecentEventsToKeep);
+
+            int rawCharacters = stories.Sum(story => story.Length) +
+                                events.Sum(eventStory => eventStory.Length);
+
+            bool hasUnsummarizedArchive =
+                storyBoundary > _summarizedStoryCount ||
+                eventBoundary > _summarizedEventCount;
+
+            bool shouldCompact =
+                rawCharacters > NarrativeMemoryThresholdChars &&
+                hasUnsummarizedArchive;
+
+            if (shouldCompact)
+            {
+                string olderStories = string.Join(
+                    Environment.NewLine,
+                    stories
+                        .Skip(_summarizedStoryCount)
+                        .Take(Math.Max(0, storyBoundary - _summarizedStoryCount))
+                        .Select(story => $"- {story}"));
+
+                string olderEvents = string.Join(
+                    Environment.NewLine,
+                    events
+                        .Skip(_summarizedEventCount)
+                        .Take(Math.Max(0, eventBoundary - _summarizedEventCount))
+                        .Select(eventStory => $"- {eventStory}"));
+
+                string archive = $"""
+                    CRÔNICA EXISTENTE:
+                    {_adventureChronicle}
+
+                    NOVAS CENAS PARA INCORPORAR:
+                    {olderStories}
+
+                    NOVOS EVENTOS PARA INCORPORAR:
+                    {olderEvents}
+                    """;
+
+                const string summarySystemPrompt =
+                    "Você mantém a memória de uma única aventura de roguelike medieval. " +
+                    "Responda SOMENTE com um objeto JSON válido, sem markdown e sem texto adicional. " +
+                    "O JSON deve conter exatamente duas propriedades: title e narrative. " +
+                    "title deve ser a string Crônica da Aventura. " +
+                    "narrative deve ser uma crônica compacta e factual, preservando personagens, lugares, " +
+                    "inimigos, objetivos, relações, ameaças e consequências importantes. " +
+                    "Elimine detalhes repetidos e resultados mecânicos de baixo valor narrativo. " +
+                    "Não invente acontecimentos novos. Escreva em português do Brasil.";
+
+                BattleStory? summary = await GeneratePromptAsync(
+                    $"""
+                    Atualize a crônica da aventura usando a memória existente e os novos acontecimentos abaixo.
+
+                    {archive}
+
+                    Preserve os fatos importantes para que uma cena futura consiga continuar a história sem
+                    precisar das cenas antigas completas. Escreva de forma compacta, mas não apague fatos
+                    relevantes para personagens, lugares, ameaças e consequências.
+                    """,
+                    maxTokens: 280,
+                    temperature: 0.15f,
+                    systemPromptOverride: summarySystemPrompt,
+                    maxNarrativeLength: 1600);
+
+                if (summary is not null)
+                {
+                    _adventureChronicle = summary.Narrative;
+                    _summarizedStoryCount = storyBoundary;
+                    _summarizedEventCount = eventBoundary;
+
+                    WriteDiagnostic(
+                        "memory-compaction",
+                        $"Resumo atualizado. Histórias compactadas: {_summarizedStoryCount}. Eventos compactados: {_summarizedEventCount}.");
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(_adventureChronicle))
+            {
+                string recentStories = stories.Count == 0
+                    ? "Nenhuma cena recente."
+                    : string.Join(
+                        Environment.NewLine,
+                        stories.TakeLast(RecentStoriesToKeep).Select((story, index) =>
+                            $"{index + 1}. {story}"));
+
+                string recentEvents = events.Count == 0
+                    ? "Nenhum evento recente."
+                    : string.Join(
+                        Environment.NewLine,
+                        events.TakeLast(RecentEventsToKeep).Select((eventStory, index) =>
+                            $"{index + 1}. {eventStory}"));
+
+                return $"""
+                    CRÔNICA DA AVENTURA:
+                    {_adventureChronicle}
+
+                    ÚLTIMAS CENAS:
+                    {recentStories}
+
+                    EVENTOS MAIS RECENTES:
+                    {recentEvents}
+                    """;
+            }
+
+            if (stories.Count == 0 && events.Count == 0)
+                return "Esta é a primeira cena da jornada; ainda não existe história anterior.";
+
+            // Antes da primeira compactação, ainda temos espaço para enviar o histórico completo.
+            return $"""
+                HISTÓRIA ATUAL DA AVENTURA:
+                {string.Join(Environment.NewLine, stories.Select((story, index) => $"{index + 1}. {story}"))}
+
+                EVENTOS DA JORNADA:
+                {(events.Count == 0 ? "Nenhum evento anterior." : string.Join(
+                    Environment.NewLine,
+                    events.Select((eventStory, index) => $"{index + 1}. {eventStory}")))}
+                """;
+        }
+        catch (Exception exception)
+        {
+            WriteDiagnostic("memory-compaction-exception", exception.ToString());
+
+            return $"""
+                ÚLTIMAS CENAS CONHECIDAS:
+                {string.Join(Environment.NewLine, stories.TakeLast(RecentStoriesToKeep).Select((story, index) => $"{index + 1}. {story}"))}
+
+                EVENTOS RECENTES CONHECIDOS:
+                {(events.Count == 0 ? "Nenhum evento anterior." : string.Join(
+                    Environment.NewLine,
+                    events.TakeLast(RecentEventsToKeep).Select((eventStory, index) => $"{index + 1}. {eventStory}")))}
+                """;
+        }
+        finally
+        {
+            _memoryLock.Release();
+        }
+    }
+
+    private static string BuildPrompt(
+        BattleNarrativeContext context,
+        string narrativeMemory)
     {
         string teamText = context.Team.Count == 0
             ? "Nenhum herói restante."
@@ -442,13 +703,6 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             : string.Join(
                 Environment.NewLine,
                 context.Items.Select(item => $"- {item.Name}"));
-
-        string previousText = context.PreviousStories.Count == 0
-            ? "Esta é a abertura da jornada; ainda não existe história anterior."
-            : string.Join(
-                Environment.NewLine,
-                context.PreviousStories.TakeLast(4).Select((story, index) =>
-                    $"{index + 1}. {story}"));
 
         return $"""
             CONTINUAÇÃO DA BATALHA
@@ -469,8 +723,8 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             Relíquias:
             {itemText}
 
-            História anterior:
-            {previousText}
+            Memória narrativa:
+            {narrativeMemory}
 
             Continue exatamente essa mesma história.
             Mostre como a ação da rodada mudou a situação da batalha.
@@ -483,8 +737,8 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
         IReadOnlyList<Item> items,
         int level,
         int gold,
-        IReadOnlyCollection<string> previousBattleStories,
-        IReadOnlyCollection<string> recentEvents)
+        int mechanicsId,
+        string narrativeMemory)
     {
         string teamText = team.Count == 0
             ? "Nenhum herói restante."
@@ -499,26 +753,17 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
                 Environment.NewLine,
                 items.Select(item => $"- {item.Name}"));
 
-        string battleStoryText = previousBattleStories.Count == 0
-            ? "Nenhuma narrativa de batalha anterior."
-            : string.Join(
-                Environment.NewLine,
-                previousBattleStories.TakeLast(5).Select((story, index) =>
-                    $"{index + 1}. {story}"));
-
-        string recentText = recentEvents.Count == 0
-            ? "Nenhum evento anterior. Este é o primeiro evento da jornada."
-            : string.Join(
-                Environment.NewLine,
-                recentEvents.TakeLast(4).Select((eventStory, index) =>
-                    $"{index + 1}. {eventStory}"));
-
         return $"""
             GERE O PRÓXIMO EVENTO DA MESMA AVENTURA
 
             Estado:
             - Andar: {level}/5
             - Ouro: {gold}
+            - Perfil mecânico interno do evento: {mechanicsId}
+
+            O perfil mecânico é apenas um contrato interno para o C# resolver a consequência
+            das escolhas. Não o mencione ao jogador e não deixe que ele limite a ambientação.
+            O texto, título e as três opções devem ser originais e derivados da história atual.
 
             Esquadrão:
             {teamText}
@@ -526,11 +771,8 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             Relíquias:
             {itemText}
 
-            NARRATIVA PRINCIPAL DA BATALHA:
-            {battleStoryText}
-
-            HISTÓRIA DOS EVENTOS ANTERIORES:
-            {recentText}
+            MEMÓRIA DA AVENTURA:
+            {narrativeMemory}
 
             REGRA PRINCIPAL DE CONTINUIDADE:
             Este evento acontece imediatamente depois da última cena da narrativa principal.
@@ -712,6 +954,7 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
     public void Dispose()
     {
         _generationLock.Dispose();
+        _memoryLock.Dispose();
         _model?.Dispose();
     }
 }

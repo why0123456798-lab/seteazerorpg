@@ -7,17 +7,21 @@ public class EventService : IEventService
 {
     private static readonly Random Random = Random.Shared;
 
-    public Task<Event?> RandomEvent()
+    public int GetRandomMechanicsId()
     {
-        // Eventos acontecem em todos os níveis.
-        // O Id define apenas qual conjunto de regras mecânicas será usado pelo C#.
-        int mechanicsId = Random.Next(1, 4);
+        // O ID define somente quais regras mecânicas o C# usará.
+        // O conteúdo narrativo real é responsabilidade da IA.
+        return Random.Next(1, 4);
+    }
 
-        Event mechanicsTemplate = mechanicsId switch
+    public Event CreateFallbackEvent(int mechanicsId)
+    {
+        // Usado somente se a IA não conseguir gerar o evento.
+        return mechanicsId switch
         {
             1 => new Event(
                 1,
-                "Um Encontro na Estrada",
+                "Encontro Inesperado",
                 "Uma presença inesperada interrompe a marcha do grupo.",
                 "Enfrentar a situação pela força.",
                 "Investigar cuidadosamente o que aconteceu.",
@@ -25,22 +29,20 @@ public class EventService : IEventService
 
             2 => new Event(
                 2,
-                "Um Caminho Perigoso",
-                "O grupo encontra um obstáculo que pode esconder uma oportunidade ou uma ameaça.",
+                "Caminho Perigoso",
+                "Um obstáculo ameaça o avanço da party.",
                 "Resistir ao perigo e proteger o grupo.",
                 "Encontrar uma solução usando astúcia.",
                 "Recuar e procurar outro caminho."),
 
             _ => new Event(
                 3,
-                "Um Santuário Abandonado",
+                "Santuário Abandonado",
                 "Uma antiga construção chama a atenção do grupo durante a jornada.",
-                "Examinar o santuário com cuidado.",
-                "Forçar a passagem e procurar uma recompensa.",
-                "Respeitar o lugar e deixar o local em paz.")
+                "Examinar o local com cuidado.",
+                "Forçar a passagem em busca de uma vantagem.",
+                "Respeitar o lugar e seguir em frente.")
         };
-
-        return Task.FromResult<Event?>(mechanicsTemplate);
     }
 
     public EventResult GetEventResult(

@@ -490,7 +490,8 @@ public class GameGUI : Form
         // não mude enquanto a geração estiver acontecendo em background.
         initialBattleStoryTask = _battleNarrator.GenerateInitialAsync(
             currentLevel,
-            battleStoryHistory.ToList());
+            battleStoryHistory.ToList(),
+            eventHistory.ToList());
     }
 
     private async Task StartGame(string chosenMode)
@@ -1688,29 +1689,39 @@ public class GameGUI : Form
         // Permite que a tela de carregamento seja desenhada antes da inferência.
         await Task.Yield();
 
-        BattleStory? conclusion = await _battleNarrator.GenerateConclusionAsync(
-            currentLevel,
-            missionSuccess,
-            sucessos,
-            falhas,
-            team.ToList(),
-            purchasedItems.ToList(),
-            battleStoryHistory.ToList(),
-            eventHistory.ToList());
+        // O desfecho já foi gerado na última rodada quando o nível terminou.
+        // Reutilizamos a mesma cena para evitar uma segunda inferência e uma conclusão diferente.
+        BattleStory? conclusion = lastBattleConclusion;
 
         if (conclusion is null)
         {
-            conclusion = missionSuccess
-                ? new BattleStory(
-                    $"Vitória no Nível {currentLevel}",
-                    "A party supera o confronto e encerra este capítulo com uma vitória clara. As marcas da batalha permanecem, mas os heróis seguem adiante.")
-                : new BattleStory(
-                    "A Queda da Party",
-                    "As forças da party chegam ao fim. Derrotados pelas consequências do confronto, os heróis não conseguem continuar a jornada.");
+            conclusion = await _battleNarrator.GenerateConclusionAsync(
+                currentLevel,
+                missionSuccess,
+                sucessos,
+                falhas,
+                team.ToList(),
+                purchasedItems.ToList(),
+                battleStoryHistory.ToList(),
+                eventHistory.ToList());
+
+            if (conclusion is not null)
+            {
+                battleStoryHistory.Add(
+                    $"{conclusion.Title}: {conclusion.Narrative}");
+            }
         }
 
-        battleStoryHistory.Add(
-            $"{conclusion.Title}: {conclusion.Narrative}");
+        if (conclusion is null)
+        {
+            conclusion = new BattleStory(
+                missionSuccess
+                    ? $"Vitória no Nível {currentLevel}"
+                    : "A Queda da Party",
+                missionSuccess
+                    ? "O sistema confirmou a vitória da party neste nível, mas a narrativa automática não pôde ser exibida."
+                    : "O sistema confirmou a derrota da party neste nível, mas a narrativa automática não pôde ser exibida.");
+        }
 
         ClearScreen();
 
@@ -2160,15 +2171,12 @@ public class GameGUI : Form
         // antes de começar a inferência local.
         await Task.Yield();
 
-        Event? mechanicsTemplate = await _eventService.RandomEvent();
-        if (mechanicsTemplate is null)
-        {
-            await ExecuteRestPhase();
-            return;
-        }
+        // O C# escolhe somente o perfil mecânico do evento.
+        // Toda a narrativa visível ao jogador é gerada pela IA.
+        int mechanicsId = _eventService.GetRandomMechanicsId();
 
         Event? generatedEvent = await _battleNarrator.GenerateEventAsync(
-            mechanicsTemplate,
+            mechanicsId,
             team.ToList(),
             purchasedItems.ToList(),
             currentLevel,
@@ -2176,7 +2184,10 @@ public class GameGUI : Form
             battleStoryHistory.ToList(),
             eventHistory.ToList());
 
-        Event gameEvent = generatedEvent ?? mechanicsTemplate;
+        // O texto abaixo só existe como fallback técnico. Em condições normais,
+        // título, descrição e as três opções vêm inteiramente da IA.
+        Event gameEvent = generatedEvent
+            ?? _eventService.CreateFallbackEvent(mechanicsId);
 
         await NextEventPhase(gameEvent);
     }

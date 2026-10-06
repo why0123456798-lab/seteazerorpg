@@ -6,7 +6,8 @@ public interface IBattleNarrator
 {
     Task<BattleStory?> GenerateInitialAsync(
         int level,
-        IReadOnlyCollection<string> previousStories);
+        IReadOnlyCollection<string> previousStories,
+        IReadOnlyCollection<string> recentEvents);
 
     Task<BattleStory?> GenerateAsync(BattleNarrativeContext context);
 
@@ -21,7 +22,7 @@ public interface IBattleNarrator
         IReadOnlyCollection<string> recentEvents);
 
     Task<Event?> GenerateEventAsync(
-        Event mechanicsTemplate,
+        int mechanicsId,
         IReadOnlyList<Agent> team,
         IReadOnlyList<Item> items,
         int level,

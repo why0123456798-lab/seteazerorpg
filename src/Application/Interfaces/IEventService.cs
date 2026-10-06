@@ -8,7 +8,10 @@ namespace RPGBattleMaker.Application.Interfaces
     public interface IEventService
     {
         EventResult GetEventResult(Event events, int selectedValue, List<Agent> teamAgents);
-        Task<Event?> RandomEvent();
+
+        int GetRandomMechanicsId();
+
+        Event CreateFallbackEvent(int mechanicsId);
     }
 }
 
