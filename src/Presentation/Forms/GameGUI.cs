@@ -1,4 +1,4 @@
-﻿using CsvHelper;
+using CsvHelper;
 using Microsoft.Data.Sqlite;
 using RPGBattleMaker.Application.Interfaces;
 using RPGBattleMaker.Application.Services;
@@ -11,6 +11,7 @@ namespace RPGBattleMaker.Presentation.Forms;
 using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.Reflection;
+using System.Runtime.InteropServices;
 
 public class GameGUI : Form
 {
@@ -62,6 +63,14 @@ public class GameGUI : Form
     private Label lblHeroStats = null!;
     private Label lblMissionTitle = null!;
     private PictureBox pbBattleHero = null!;
+
+    // Referências da loja para atualizar somente a parte afetada por uma compra/venda.
+    private Label? shopGoldLabel;
+    private GroupBox? shopTeamFrame;
+    private FlowLayoutPanel? shopTeamList;
+    private Panel? shopItemList;
+    private readonly Dictionary<int, RarityCard> shopHeroCards = new();
+    private readonly Dictionary<int, RarityCard> shopItemCards = new();
     #endregion
 
     #region Constructor
@@ -134,6 +143,25 @@ public class GameGUI : Form
         #endregion
     }
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
+
+    private const int WM_SETREDRAW = 0x000B;
+
+    private async Task RebuildShopWithoutFlicker()
+    {
+        SendMessage(mainPanel.Handle, WM_SETREDRAW, IntPtr.Zero, IntPtr.Zero);
+        try
+        {
+            await CreateShopScreen();
+        }
+        finally
+        {
+            SendMessage(mainPanel.Handle, WM_SETREDRAW, new IntPtr(1), IntPtr.Zero);
+            mainPanel.Invalidate(true);
+            mainPanel.Update();
+        }
+    }
     private void ClearScreen()
     {
         mainPanel.Controls.Clear();
@@ -557,6 +585,7 @@ public class GameGUI : Form
             Padding = new Padding(0, 0, 0, 0)
         };
         goldBadge.Controls.Add(goldLbl);
+        shopGoldLabel = goldLbl;
 
         FlowLayoutPanel headerInfo = new FlowLayoutPanel
         {
@@ -889,6 +918,7 @@ public class GameGUI : Form
                 Padding = new Padding(4)
             };
             marketGrid.Controls.Add(card, i % 2, i / 2);
+            shopHeroCards[index] = card;
 
             if (agent == null)
             {
@@ -1056,9 +1086,11 @@ public class GameGUI : Form
 
         // Lado Direito: Sua Equipe
         GroupBox teamFrame = new GroupBox { Text = $" SEU ESQUADRÃO  {team.Count}/5 ", Font = new Font("Segoe UI Semibold", 10.5f, FontStyle.Bold), ForeColor = ColorTranslator.FromHtml("#d7b56d"), Dock = DockStyle.Fill };
+        shopTeamFrame = teamFrame;
         mainLayout.Controls.Add(teamFrame, 2, 0);
 
         FlowLayoutPanel teamList = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, AutoScroll = true, Padding = new Padding(10) };
+        shopTeamList = teamList;
         teamFrame.Controls.Add(teamList);
 
         if (team.Count == 0)
@@ -1196,7 +1228,7 @@ public class GameGUI : Form
             gold -= rerollCount;
             rerollCount++;
             market = _gameService.RollMarket(team, allAgents, currentLevel);
-            await CreateShopScreen();
+            await RebuildShopWithoutFlicker();
         }
         else
         {
@@ -1216,7 +1248,7 @@ public class GameGUI : Form
                 gold -= agent.Rarity;
                 team.Add(agent);
                 market[idx] = null;
-                await CreateShopScreen();
+                await RebuildShopWithoutFlicker();
             }
             else
             {
@@ -1234,7 +1266,7 @@ public class GameGUI : Form
         Agent removed = team[idx];
         team.RemoveAt(idx);
         gold += (int)Math.Ceiling(removed.Rarity / 2.0);
-        await CreateShopScreen();
+        await RebuildShopWithoutFlicker();
     }
 
     private async Task CheckGoToMission()
@@ -1257,13 +1289,16 @@ public class GameGUI : Form
     #region TELA 3: TELA DE BATALHA / MISSÃO
     private async Task StartMissionPhase()
     {
-        // A história inicial agora também define o tema mecânico da missão.
-        // Aguardamos a geração antes de calcular DC e escolher o melhor herói,
-        // garantindo que narrativa e mecânica estejam alinhadas.
+        // A introdução é gerada e exibida antes de qualquer rolagem.
+        // Isso evita que a abertura seja confundida com a primeira narrativa de combate.
         BattleStory? initialStory = initialBattleStoryTask is not null
             ? await initialBattleStoryTask
-            : null;
+            : await _battleNarrator.GenerateInitialAsync(
+                currentLevel,
+                battleStoryHistory.ToList(),
+                eventHistory.ToList());
 
+        initialBattleStoryTask = null;
         currentTheme = initialStory?.Theme ?? GetRandomTheme();
 
         ClearScreen();
@@ -1388,14 +1423,24 @@ public class GameGUI : Form
         battleFrame.Controls.Add(btnRoll);
         UpdateBattleLayout(battleFrame);
 
-        await SetupNextCombatantInfo();
-
-        if (bestHero is not null)
+        // A introdução é uma cena de abertura, não uma ação de combate.
+        // Ela aparece uma única vez antes do primeiro D20.
+        if (initialStory is not null)
         {
-            btnRoll.Enabled = false;
-            await GenerateBattleStoryAsync(isInitial: true);
-            btnRoll.Enabled = true;
+            await AppendLog("✦ A aventura começa... ✦", Color.Orange);
+            await AppendLog($"📖 {initialStory.Title}", Color.Gold);
+            await AppendLog(initialStory.Narrative, Color.White);
+            battleStoryHistory.Add($"{initialStory.Title}: {initialStory.Narrative}");
         }
+        else
+        {
+            await AppendLog(
+                "A introdução não pôde ser gerada. A missão seguirá com a situação mecânica atual.",
+                Color.Gray);
+        }
+
+        await SetupNextCombatantInfo();
+        btnRoll.Enabled = bestHero is not null;
     }
 
     private void UpdateBattleLayout(Panel battleFrame)
@@ -2465,7 +2510,7 @@ public class GameGUI : Form
                 market = _gameService.RollMarket(team, allAgents, currentLevel);
                 itemShop = RollItemShop(currentLevel);
                 rerollCount = 1;
-                await CreateShopScreen();
+                await RebuildShopWithoutFlicker();
             };
         }
         frame.Controls.Add(btnNext);
@@ -2530,7 +2575,7 @@ public class GameGUI : Form
             ApplyItemEffect(item);
             purchasedItems.Add(item);
             itemShop[idx] = null;
-            await CreateShopScreen();
+            await RebuildShopWithoutFlicker();
         }
         else
         {

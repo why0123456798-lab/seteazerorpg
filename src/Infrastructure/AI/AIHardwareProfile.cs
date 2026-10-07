@@ -73,12 +73,15 @@ public sealed record AIHardwareProfile(
 
     public static AIHardwareProfile CreateVulkan()
     {
+        // A RTX 3050 Ti 4 GB não precisa de um contexto enorme para este jogo.
+        // 3072 reduz o KV cache e deixa mais margem de VRAM para o modelo,
+        // enquanto um batch maior acelera a avaliação do prompt.
         return new(
             AIBackend.Vulkan,
             0,
-            4096,
+            3072,
+            512,
             256,
-            128,
             -1,
             true,
             "Vulkan GPU (VRAM não identificada automaticamente)");

@@ -10,7 +10,7 @@ namespace RPGBattleMaker.Infrastructure.AI;
 
 public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
 {
-    private const string ModelFileName = "Llama-3.2-3B-Instruct-Q4_K_M.gguf";
+    private const string ModelFileName = "Qwen3-4B-Q4_K_M.gguf";
 
     // Mantemos o contexto do modelo maior, mas não deixamos a memória narrativa
     // crescer indefinidamente. Quando a história bruta passa desse limite,
@@ -388,15 +388,23 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
                 "Responda SOMENTE com um objeto JSON válido, sem markdown e sem texto adicional. " +
                 "O JSON deve conter exatamente duas propriedades: title e narrative. " +
                 "As duas propriedades devem ter APENAS strings como valores. " +
-                "title deve ser curto. narrative deve ter de 2 a 3 frases. " +
+                "title deve ser curto. narrative deve desenvolver a cena em vez de apenas resumir o resultado. " +
+                "REGRA MAIS IMPORTANTE: a AÇÃO ATUAL fornecida no estado mecânico é uma instrução obrigatória sobre o que deve ser narrado. " +
+                "A memória da aventura serve apenas como contexto e NUNCA pode substituir, alterar ou repetir a ação atual. " +
+                "Se a ação atual for ATAQUE, a cena deve mostrar o herói em destaque atacando a ameaça. " +
+                "Se a ação atual for DEFESA, a cena deve mostrar o herói em destaque se defendendo de uma ameaça. " +
+                "Se a ação atual for PERÍCIA, a cena deve mostrar o herói em destaque executando uma perícia, técnica, investigação ou manobra apropriada. " +
+                "NUNCA narre a ação de outra categoria como se fosse a ação atual. " +
+                "Não use uma ação da cena anterior para decidir o que o herói está fazendo agora. " +
+                "O resultado mecânico também é obrigatório: SUCESSO significa que a ação atual funcionou; FALHA significa que a ação atual não funcionou. " +
+                "Em um ATAQUE bem-sucedido, mostre o ataque do herói atingindo, pressionando ou prejudicando a ameaça. " +
+                "Em uma DEFESA bem-sucedida, mostre o herói bloqueando, desviando, resistindo ou neutralizando a ameaça sem sofrer dano nesta rodada. " +
+                "Em uma PERÍCIA bem-sucedida, mostre a perícia produzindo o efeito narrativo positivo correspondente. " +
+                "Não transforme um sucesso em uma ação do inimigo nem em uma simples reação passiva do herói. " +
+                "Em uma falha, mostre primeiro a tentativa da ação atual e depois sua consequência. " +
                 "Não invente números, dano, cura, ouro, DC, XP ou resultados diferentes dos informados no estado. " +
-                "Em caso de FALHA, descreva claramente que o herói ou grupo foi prejudicado, sem inventar um valor de dano. " +
-                "Quando a falha tiver causado dano ao herói em destaque, é OBRIGATÓRIO narrar que esse próprio herói foi atingido, ferido ou sofreu uma consequência física concreta causada pelo conflito. " +
-                "Não diga que ele se defendeu com sucesso, desviou completamente ou saiu ileso quando o estado mecânico informa que ele sofreu dano. " +
-                "Em caso de SUCESSO, é PROIBIDO dizer que a party foi ferida, machucada, sofreu dano, sangrou ou perdeu vida. " +
-                "Em caso de SUCESSO, descreva apenas avanço, defesa bem-sucedida, domínio da situação, derrota do inimigo ou outra consequência positiva coerente. " +
-                "Se houve crítico, destaque o impacto extraordinário. " +
-                "A narrativa deve continuar naturalmente a partir da história anterior quando houver uma. " +
+                "Se houve crítico, destaque o impacto extraordinário sem mudar a ação realizada. " +
+                "A narrativa deve continuar naturalmente a partir da história anterior, mas o estado mecânico atual sempre tem prioridade absoluta. " +
                 "Escreva tudo em português do Brasil.";
 
             if (requireDamageConsequence)
@@ -672,23 +680,35 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
                     "A narrativa deve continuar naturalmente a partir da história anterior quando houver uma. " +
                     "Escreva tudo em português do Brasil.";
 
-                string modelPrompt =
-                    "<|start_header_id|>system<|end_header_id|>\n" +
-                    systemPrompt +
-                    "\n<|eot_id|>" +
-                    "<|start_header_id|>user<|end_header_id|>\n" +
-                    prompt +
-                    "\nRetorne somente o JSON completo.\n" +
-                    "<|eot_id|>" +
-                    "<|start_header_id|>assistant<|end_header_id|>\n";
+                bool isQwen3 = ModelFileName.StartsWith("Qwen3-", StringComparison.OrdinalIgnoreCase);
+
+                string modelPrompt = isQwen3
+                    ? "<|im_start|>system\n" +
+                      systemPrompt +
+                      "\n<|im_end|>\n" +
+                      "<|im_start|>user\n" +
+                      prompt +
+                      "\n/no_think\n" +
+                      "<|im_end|>\n" +
+                      "<|im_start|>assistant\n"
+                    : "<|start_header_id|>system<|end_header_id|>\n" +
+                      systemPrompt +
+                      "\n<|eot_id|>" +
+                      "<|start_header_id|>user<|end_header_id|>\n" +
+                      prompt +
+                      "\nRetorne somente o JSON completo.\n" +
+                      "<|eot_id|>" +
+                      "<|start_header_id|>assistant<|end_header_id|>\n";
 
                 InferenceParams inferenceParams = new()
                 {
                     MaxTokens = maxTokens,
                     SamplingPipeline = new DefaultSamplingPipeline
                     {
-                        Temperature = temperature,
-                        TopP = 0.9f,
+                        Temperature = isQwen3 ? Math.Max(temperature, 0.55f) : temperature,
+                        TopP = isQwen3 ? 0.8f : 0.9f,
+                        TopK = isQwen3 ? 20 : 0,
+                        PresencePenalty = isQwen3 ? 1.5f : 0f,
                         Seed = (uint)Random.Shared.Next()
                     }
                 };
@@ -899,13 +919,29 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
 
             Andar: {context.Level}/5
             Rodada: {context.Round}/5
-            Tema usado nesta rodada: {context.Theme}
+            ESTADO MECÂNICO ATUAL — ESTE BLOCO TEM PRIORIDADE ABSOLUTA
+
             Herói em destaque: {context.Hero.Name} ({context.Hero.Type})
+            AÇÃO ATUAL DO HERÓI: {context.Theme.ToUpperInvariant()}
+            Resultado mecânico: {context.Outcome.ToUpperInvariant()}
             D20: {context.D20}
             Total: {context.Total}
             DC: {context.Dc}
-            Resultado mecânico: {context.Outcome}
             Consequência mecânica: {context.OutcomeDetail}
+
+            CONTRATO DA AÇÃO ATUAL:
+            - ATAQUE = {context.Hero.Name} deve ser mostrado realizando uma ação ofensiva contra a ameaça.
+            - DEFESA = {context.Hero.Name} deve ser mostrado realizando uma ação defensiva contra uma ameaça.
+            - PERÍCIA = {context.Hero.Name} deve ser mostrado realizando uma técnica, perícia, investigação, manobra ou uso inteligente de recurso.
+            - SUCESSO = a ação acima FUNCIONOU. Mostre claramente a consequência positiva da ação do herói.
+            - FALHA = a ação acima NÃO FUNCIONOU. Mostre primeiro a tentativa da ação e depois a consequência da falha.
+
+            EXEMPLOS DE ERROS PROIBIDOS:
+            - AÇÃO ATUAL = ATAQUE: não descreva o herói apenas se defendendo enquanto o inimigo ataca.
+            - AÇÃO ATUAL = DEFESA: não diga que um ataque inimigo acertou o herói em um sucesso defensivo.
+            - AÇÃO ATUAL = PERÍCIA: não substitua a perícia por um ataque ou defesa genérico.
+            - Nunca use a ação da rodada anterior como a ação desta rodada.
+            - A memória explica COMO chegamos aqui; ela não decide O QUE o herói faz agora.
 
             Equipe atual:
             {teamText}
@@ -915,6 +951,14 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
 
             Memória narrativa:
             {narrativeMemory}
+
+            ORDEM DE PRIORIDADE PARA ESCREVER A CENA:
+            1. Primeiro, obedeça à AÇÃO ATUAL DO HERÓI e ao RESULTADO MECÂNICO.
+            2. Depois, use a memória apenas para definir cenário, ameaça, posição, personagens e continuidade.
+            3. Por último, escolha detalhes estilísticos que tornem a cena interessante.
+            Se a memória e o estado atual entrarem em conflito, IGNORE a memória conflitante e siga o estado atual.
+            A primeira ação concreta da narrativa deve corresponder à AÇÃO ATUAL DO HERÓI.
+            O herói em destaque deve ser o agente principal dessa ação; não substitua a ação dele pela ação de um inimigo ou aliado.
 
             A última cena da memória JÁ ACONTECEU e não deve ser recontada.
             Continue a história a partir do ponto exato em que ela terminou.
