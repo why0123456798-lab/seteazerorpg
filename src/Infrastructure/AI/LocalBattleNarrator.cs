@@ -11,7 +11,6 @@ namespace RPGBattleMaker.Infrastructure.AI;
 public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
 {
     private const string ModelFileName = "Llama-3.2-3B-Instruct-Q4_K_M.gguf";
-    private const uint ModelContextSize = 4096;
 
     // Mantemos o contexto do modelo maior, mas não deixamos a memória narrativa
     // crescer indefinidamente. Quando a história bruta passa desse limite,
@@ -23,8 +22,10 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
     private readonly SemaphoreSlim _generationLock = new(1, 1);
     private readonly SemaphoreSlim _memoryLock = new(1, 1);
     private LLamaWeights? _model;
+    private LLamaContext? _context;
     private string? _loadedModelPath;
     private bool _initializationAttempted;
+    private AIHardwareProfile? _hardwareProfile;
 
     private string _adventureChronicle = string.Empty;
     private int _summarizedStoryCount;
@@ -40,15 +41,14 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             recentEvents);
 
         const string introductionSystemPrompt =
-            "Você é o narrador principal de uma aventura de roguelike medieval chamada RPG Battle Maker. " +
+            "Você é o mestre de um rpg de mesa de uma aventura de roguelike medieval chamada RPG Battle Maker. " +
             "Responda SOMENTE com um objeto JSON válido, sem markdown e sem texto adicional. " +
             "O JSON deve conter exatamente duas propriedades: title e narrative. " +
             "As duas propriedades devem ser strings. " +
             "title deve ser curto e evocativo. " +
-            "Para uma introdução de nível, escreva exatamente 4 frases objetivas e concretas. " +
-            "A primeira frase deve dizer o que a party estava fazendo ou perseguindo. A segunda deve explicar como chegou ao local. " +
-            "A terceira deve mostrar o que encontrou e qual é a ameaça. A quarta deve explicar por que o conflito começa agora. " +
-            "Não comece com clima, silêncio, sombras ou tensão antes de explicar a situação. Em níveis posteriores, continue diretamente a história anterior " +
+            "Para uma introdução de nível, escreva aproximadamente 4 frases objetivas e concretas podendo extender caso necessário. " +
+            "Crie uma história cativante de como a party chegou até aquele local, e prepare o ambiente para o futuro conflito" +
+            "Em níveis posteriores, continue diretamente a história anterior " +
             "e preserve personagens, lugares, ameaças e consequências já estabelecidas. " +
             "Não invente números ou resultados mecânicos.";
 
@@ -57,7 +57,7 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             ABERTURA DO NÍVEL {level}
 
             Esta é uma continuação da mesma aventura.
-            Antes de chegar ao combate, dê ao jogador um contexto maior sobre como a party chegou até aqui.
+            Antes de chegar ao combate, dê ao jogador um contexto maior sobre como a party chegou até aqui lembre-se você é um mestre de um rpg de mesa contando a história.
             Siga obrigatoriamente esta ordem causal:
             1. o que a party estava fazendo ou perseguindo;
             2. como e por que chegou ao local atual;
@@ -83,9 +83,9 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
         // Última tentativa exclusiva da introdução: reduzimos o pedido ao essencial
         // para que uma resposta AI completa tenha prioridade sobre qualquer fallback fixo.
         const string compactIntroductionSystemPrompt =
-            "Você é o narrador de uma aventura medieval. " +
+            "Você é o mestre de um rpg de mesa de uma aventura medieval. " +
             "Responda SOMENTE com JSON válido contendo title e narrative. " +
-            "Escreva exatamente 4 frases curtas em português do Brasil. " +
+            "Escreva aproximadamente 4 frases curtas em português do Brasil podendo aumentar caso precise dar mais contexto a história. " +
             "Frase 1: objetivo da party. Frase 2: como chegou ao local. " +
             "Frase 3: o que encontrou e a ameaça. Frase 4: por que o combate começa agora. " +
             "Não comece com atmosfera genérica e não invente números ou mecânicas.";
@@ -97,7 +97,7 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             MEMÓRIA DA AVENTURA:
             {narrativeMemory}
 
-            Escreva uma introdução causal em exatamente 4 frases.
+            Escreva uma introdução causal em aproximadamente 4 frases podendo aumentar caso precise dar mais contexto a história.
             """,
             maxTokens: 170,
             temperature: 0.20f,
@@ -119,9 +119,19 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             Array.Empty<string>());
 
         BattleStory? story = await GeneratePromptAsync(
-            BuildPrompt(context, narrativeMemory));
+            BuildPrompt(context, narrativeMemory),
+            maxTokens: 280,
+            temperature: 0.28f,
+            maxNarrativeLength: 750);
 
-        return story ?? new BattleStory(
+        if (story is not null)
+            return story;
+
+        WriteDiagnostic(
+            "story-fallback",
+            $"Geração inválida após retries. level={context.Level}; round={context.Round}; hero={context.Hero.Name}; outcome={context.Outcome}");
+
+        return new BattleStory(
             $"A Batalha Continua",
             $"{context.Hero.Name} enfrenta as consequências da rodada marcada como {context.Outcome.ToLowerInvariant()}. A equipe sente a tensão aumentar enquanto o combate avança para o próximo momento decisivo.");
     }
@@ -153,7 +163,7 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
               A equipe concluiu o nível com {successes} sucesso(s) e {failures} falha(s).
               A história deve terminar este capítulo como uma vitória da party.
               Mostre a equipe superando o conflito, sofrendo as consequências apropriadas,
-              e encerrando este capítulo com uma sensação clara de conquista e progresso.
+              e encerrando este capítulo com uma sensação clara de conquista e progresso como a ameaça foi derrotada ou criando um gancho para as proximas aventuras.
               Não trate isso como o fim da aventura inteira: deixe uma continuidade natural
               para o próximo nível.
               """
@@ -161,7 +171,7 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
               DERROTA / GAME OVER
               A equipe fracassou no nível com {successes} sucesso(s) e {failures} falha(s).
               A história deve encerrar a aventura derrotando a party.
-              Mostre as consequências do fracasso, a derrota dos heróis e o fim da jornada.
+              Mostre as consequências do fracasso, a derrota dos heróis e o fim da jornada pode ser qualquer tipo de derrota, morte dos heróis, objetivo não cumprido.
               Não transforme a derrota em vitória ou em um simples recuo.
               """;
 
@@ -169,7 +179,7 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             CONCLUSÃO NARRATIVA DO NÍVEL {level}
 
             Você está escrevendo a conclusão dramática do capítulo atual de uma única aventura.
-            Não crie uma história nova. Continue exatamente o que já foi contado.
+            Não crie uma história nova. Continue exatamente o que já foi contado como um mestre de rpg de mesa faria.
 
             {result}
 
@@ -179,9 +189,8 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             ESTADO FINAL DA PARTY:
             {teamText}
 
-            Escreva uma conclusão satisfatória, cinematográfica e coerente.
-            Retome acontecimentos importantes já estabelecidos e dê sensação de fechamento.
-            Em caso de sucesso, a party deve claramente vencer o conflito deste nível.
+            Escreva uma conclusão satisfatória e coerente podendo ser uma conclusão desse capítulo ou criando um gancho para as próximas aventuras.
+            Em caso de sucesso, a party deve claramente vencer o conflito deste nível mesmo que o objetivo final não tenha aindo sido alcançado.
             Em caso de fracasso, a party deve claramente ser derrotada e a aventura terminar.
             Não invente números, recompensas ou mecânicas que não foram informadas.
             """;
@@ -361,8 +370,8 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
             int timeoutSeconds = maxTokens <= 200
-                ? (attempt == 1 ? 15 : 8)
-                : (attempt == 1 ? 25 : 12);
+                ? (attempt == 1 ? 25 : 15)
+                : (attempt == 1 ? 35 : 18);
 
             using CancellationTokenSource timeout =
                 new(TimeSpan.FromSeconds(timeoutSeconds));
@@ -418,32 +427,119 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             : configuredPath;
 
         if (!File.Exists(modelPath))
-            return false;
-
-        try
         {
-            _loadedModelPath = modelPath;
-
-            NativeLibraryConfig.All
-                .WithVulkan()
-                .WithAutoFallback(false);
-
-            ModelParams parameters = new(modelPath)
-            {
-                ContextSize = ModelContextSize,
-                GpuLayerCount = 99
-            };
-
-            _model = await Task.Run(() => LLamaWeights.LoadFromFile(parameters));
-            return true;
+            WriteDiagnostic("model-missing", modelPath);
+            return false;
         }
-        catch (Exception exception)
+
+        _loadedModelPath = modelPath;
+
+        foreach (AIHardwareProfile profile in GetHardwareProfilesToTry())
         {
-            WriteDiagnostic("model-load-exception", exception.ToString());
-            _loadedModelPath = null;
-            _model?.Dispose();
-            _model = null;
-            return false;
+            try
+            {
+                ConfigureBackend(profile.Backend);
+
+                ModelParams parameters = new(modelPath)
+                {
+                    ContextSize = profile.ContextSize,
+                    GpuLayerCount = profile.GpuLayerCount,
+                    BatchSize = profile.BatchSize,
+                    UBatchSize = profile.UBatchSize,
+                    FlashAttention = profile.FlashAttention
+                };
+
+                WriteDiagnostic(
+                    "hardware-profile",
+                    $"{profile.Description} | backend={profile.Backend} | context={profile.ContextSize} | batch={profile.BatchSize} | ubatch={profile.UBatchSize} | gpuLayers={profile.GpuLayerCount} | flash={profile.FlashAttention}");
+
+                _model = await Task.Run(() => LLamaWeights.LoadFromFile(parameters));
+
+                // Reutilizamos o contexto nativo entre as gerações para evitar
+                // recriar a infraestrutura CUDA/Vulkan a cada narrativa.
+                _context = await Task.Run(() => _model.CreateContext(parameters));
+
+                _hardwareProfile = profile;
+                return true;
+            }
+            catch (Exception exception)
+            {
+                WriteDiagnostic(
+                    $"model-load-failed-{profile.Backend}",
+                    exception.ToString());
+
+                _model?.Dispose();
+                _model = null;
+            }
+        }
+
+        _loadedModelPath = null;
+        return false;
+    }
+
+    private IEnumerable<AIHardwareProfile> GetHardwareProfilesToTry()
+    {
+        string? forcedBackend = Environment
+            .GetEnvironmentVariable("RPGBATTLE_LLM_BACKEND")
+            ?.Trim()
+            .ToLowerInvariant();
+
+        if (forcedBackend == "cuda")
+        {
+            AIHardwareProfile detected = AIHardwareProfile.Detect();
+            if (detected.Backend == AIBackend.Cuda)
+                yield return detected;
+            yield return AIHardwareProfile.CreateVulkan();
+            yield return AIHardwareProfile.CreateCpu();
+            yield break;
+        }
+
+        if (forcedBackend == "vulkan")
+        {
+            yield return AIHardwareProfile.CreateVulkan();
+            yield return AIHardwareProfile.CreateCpu();
+            yield break;
+        }
+
+        if (forcedBackend == "cpu")
+        {
+            yield return AIHardwareProfile.CreateCpu();
+            yield break;
+        }
+
+        AIHardwareProfile automatic = AIHardwareProfile.Detect();
+        yield return automatic;
+
+        if (automatic.Backend != AIBackend.Vulkan)
+            yield return AIHardwareProfile.CreateVulkan();
+
+        yield return AIHardwareProfile.CreateCpu();
+    }
+
+    private static void ConfigureBackend(AIBackend backend)
+    {
+        switch (backend)
+        {
+            case AIBackend.Cuda:
+                NativeLibraryConfig.All
+                    .WithCuda(true)
+                    .WithVulkan(false)
+                    .WithAutoFallback(false);
+                break;
+
+            case AIBackend.Vulkan:
+                NativeLibraryConfig.All
+                    .WithCuda(false)
+                    .WithVulkan(true)
+                    .WithAutoFallback(false);
+                break;
+
+            default:
+                NativeLibraryConfig.All
+                    .WithCuda(false)
+                    .WithVulkan(false)
+                    .WithAutoFallback(true);
+                break;
         }
     }
 
@@ -454,21 +550,18 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
         int maxTokens = 150,
         float temperature = 0.35f)
     {
-        if (_model is null || _loadedModelPath is null)
+        if (_model is null || _context is null)
             return null;
 
         try
         {
-            ModelParams parameters = new(_loadedModelPath)
-            {
-                ContextSize = ModelContextSize,
-                GpuLayerCount = 99
-            };
-
             return await Task.Run(async () =>
             {
-                using LLamaContext context = _model.CreateContext(parameters);
-                InteractiveExecutor executor = new(context);
+                // InteractiveExecutor é stateful e mantém contadores/histórico
+                // internos entre chamadas. Por isso criamos um executor novo para
+                // cada geração, mas reutilizamos o LLamaContext nativo.
+                _context.NativeHandle.MemoryClear();
+                InteractiveExecutor executor = new(_context);
 
                 string systemPrompt = systemPromptOverride ??
                     "Você é o narrador de combate de um roguelike medieval chamado RPG Battle Maker. " +
@@ -593,10 +686,10 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
                     "Responda SOMENTE com um objeto JSON válido, sem markdown e sem texto adicional. " +
                     "O JSON deve conter exatamente duas propriedades: title e narrative. " +
                     "title deve ser a string Crônica da Aventura. " +
-                    "narrative deve ser uma crônica compacta e factual, preservando personagens, lugares, " +
+                    "narrative deve ser uma crônica compacta e contada como um mestre de um rpg de mesa, preservando personagens, lugares, " +
                     "inimigos, objetivos, relações, ameaças e consequências importantes. " +
-                    "Elimine detalhes repetidos e resultados mecânicos de baixo valor narrativo. " +
-                    "Não invente acontecimentos novos. Escreva em português do Brasil.";
+                    "Elimine detalhes repetidos. " +
+                    "Escreva em português do Brasil.";
 
                 BattleStory? summary = await GeneratePromptAsync(
                     $"""
@@ -777,7 +870,7 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             REGRA PRINCIPAL DE CONTINUIDADE:
             Este evento acontece imediatamente depois da última cena da narrativa principal.
             O evento NÃO é uma história separada ou genérica.
-            Deve parecer uma consequência natural do que acabou de acontecer com a party.
+            Deve parecer uma consequência natural do que acabou de acontecer com a party contada como um mestre de um rpg de mesa.
             Retome personagens, locais, inimigos, objetivos, ameaças, problemas ou elementos
             narrativos já apresentados sempre que houver algo relevante.
             A descrição do evento deve deixar claro por que este encontro está acontecendo agora.
@@ -803,16 +896,15 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
         if (string.IsNullOrWhiteSpace(response))
             return null;
 
-        int start = response.IndexOf('{');
-        int end = response.LastIndexOf('}');
+        string? jsonObject = ExtractFirstJsonObject(response);
 
-        if (start < 0 || end <= start)
+        if (jsonObject is null)
             return null;
 
         try
         {
             using JsonDocument document =
-                JsonDocument.Parse(response[start..(end + 1)]);
+                JsonDocument.Parse(jsonObject);
 
             JsonElement root = document.RootElement;
 
@@ -840,16 +932,15 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
         if (string.IsNullOrWhiteSpace(response))
             return null;
 
-        int start = response.IndexOf('{');
-        int end = response.LastIndexOf('}');
+        string? jsonObject = ExtractFirstJsonObject(response);
 
-        if (start < 0 || end <= start)
+        if (jsonObject is null)
             return null;
 
         try
         {
             using JsonDocument document =
-                JsonDocument.Parse(response[start..(end + 1)]);
+                JsonDocument.Parse(jsonObject);
 
             JsonElement root = document.RootElement;
 
@@ -880,6 +971,62 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
         {
             return null;
         }
+    }
+
+    private static string? ExtractFirstJsonObject(string response)
+    {
+        int start = response.IndexOf('{');
+        if (start < 0)
+            return null;
+
+        int depth = 0;
+        bool inString = false;
+        bool escaped = false;
+
+        for (int i = start; i < response.Length; i++)
+        {
+            char c = response[i];
+
+            if (inString)
+            {
+                if (escaped)
+                {
+                    escaped = false;
+                    continue;
+                }
+
+                if (c == '\\')
+                {
+                    escaped = true;
+                    continue;
+                }
+
+                if (c == '\"')
+                    inString = false;
+
+                continue;
+            }
+
+            if (c == '\"')
+            {
+                inString = true;
+                continue;
+            }
+
+            if (c == '{')
+            {
+                depth++;
+            }
+            else if (c == '}')
+            {
+                depth--;
+
+                if (depth == 0)
+                    return response[start..(i + 1)];
+            }
+        }
+
+        return null;
     }
 
     private static string ReadJsonText(JsonElement root, string propertyName)
