@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Diagnostics;
 using LLama;
 using LLama.Common;
 using LLama.Native;
@@ -125,15 +126,35 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             context.PreviousStories,
             Array.Empty<string>());
 
+        string prompt = BuildPrompt(context, narrativeMemory);
+        int estimatedPromptTokens = Math.Max(1, prompt.Length / 4);
+
+        // O contexto nativo é 4096 tokens. Se o prompt já estiver perto do limite,
+        // compactamos a memória antes de tentar inferir para evitar ContextOverflowException.
+        if (estimatedPromptTokens > 2800 && context.PreviousStories.Count > RecentStoriesToKeep)
+        {
+            WriteDiagnostic(
+                "context-near-limit",
+                $"Prompt estimado em {estimatedPromptTokens} tokens. Compactando memória antes da inferência.");
+
+            narrativeMemory = await PrepareNarrativeMemoryAsync(
+                context.PreviousStories,
+                Array.Empty<string>(),
+                forceCompaction: true);
+
+            prompt = BuildPrompt(context, narrativeMemory);
+        }
+
         BattleStory? story = await GeneratePromptAsync(
-            BuildPrompt(context, narrativeMemory),
-            maxTokens: 600,
+            prompt,
+            maxTokens: 300,
             temperature: 0.32f,
             maxNarrativeLength: 1600,
             rejectInjuryOnSuccess: context.Outcome.Equals("SUCESSO", StringComparison.OrdinalIgnoreCase),
             requireDamageConsequence: context.Outcome.Equals("FALHA", StringComparison.OrdinalIgnoreCase) &&
                                       context.OutcomeDetail.Contains("dano", StringComparison.OrdinalIgnoreCase),
-            requireTheme: true);
+            requireTheme: true,
+            maxAttempts: 1);
 
         if (story is not null && !HasExcessiveNarrativeOverlap(story.Narrative, context.PreviousStories))
             return story;
@@ -146,22 +167,37 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
         }
 
         BattleStory? freshStory = await GeneratePromptAsync(
-            BuildPrompt(context, narrativeMemory) + """
+            prompt + """
 
             ATENÇÃO: a primeira tentativa foi considerada repetitiva.
             Escreva uma cena completamente nova que avance a situação.
             Não reutilize a estrutura ou as frases da última narrativa.
             """,
-            maxTokens: 650,
+            maxTokens: 350,
             temperature: 0.38f,
             maxNarrativeLength: 1700,
             rejectInjuryOnSuccess: context.Outcome.Equals("SUCESSO", StringComparison.OrdinalIgnoreCase),
             requireDamageConsequence: context.Outcome.Equals("FALHA", StringComparison.OrdinalIgnoreCase) &&
                                       context.OutcomeDetail.Contains("dano", StringComparison.OrdinalIgnoreCase),
-            requireTheme: true);
+            requireTheme: true,
+            maxAttempts: 1);
 
-        if (freshStory is not null && !HasExcessiveNarrativeOverlap(freshStory.Narrative, context.PreviousStories))
+        if (freshStory is not null)
+        {
+            if (HasExcessiveNarrativeOverlap(freshStory.Narrative, context.PreviousStories))
+            {
+                WriteDiagnostic(
+                    "story-repetition-retry-accepted",
+                    $"Retry também apresentou sobreposição, mas o JSON é válido; usando a nova narrativa em vez do fallback. level={context.Level}; round={context.Round}");
+            }
+
             return freshStory;
+        }
+
+        // Se a primeira tentativa era válida, nunca descartamos a cena apenas
+        // por repetição: um fallback determinístico é pior do que uma narrativa AI coerente.
+        if (story is not null)
+            return story;
 
         WriteDiagnostic(
             "story-fallback",
@@ -714,16 +750,42 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
                 };
 
                 List<string> chunks = new();
+                Stopwatch stopwatch = Stopwatch.StartNew();
+                long firstTokenElapsedMs = -1;
+                int promptCharacters = modelPrompt.Length;
 
                 await foreach (string text in executor.InferAsync(
                     modelPrompt,
                     inferenceParams,
                     cancellationToken))
                 {
+                    if (firstTokenElapsedMs < 0)
+                        firstTokenElapsedMs = stopwatch.ElapsedMilliseconds;
+
                     chunks.Add(text);
                 }
 
-                return string.Concat(chunks);
+                stopwatch.Stop();
+
+                string generatedText = string.Concat(chunks);
+                double generationSeconds = Math.Max(
+                    (stopwatch.ElapsedMilliseconds - Math.Max(firstTokenElapsedMs, 0)) / 1000.0,
+                    0.001);
+                int estimatedPromptTokens = Math.Max(1, promptCharacters / 4);
+                int estimatedOutputTokens = Math.Max(1, generatedText.Length / 4);
+
+                WriteDiagnostic(
+                    "inference-metrics",
+                    $"elapsedMs={stopwatch.ElapsedMilliseconds}; " +
+                    $"timeToFirstTokenMs={firstTokenElapsedMs}; " +
+                    $"estimatedPromptTokens={estimatedPromptTokens}; " +
+                    $"outputChars={generatedText.Length}; " +
+                    $"estimatedOutputTokens={estimatedOutputTokens}; " +
+                    $"estimatedOutputTokensPerSecond={estimatedOutputTokens / generationSeconds:F1}; " +
+                    $"maxTokens={maxTokens}; " +
+                    $"note=first-token-time-includes-prompt-evaluation");
+
+                return generatedText;
             }, cancellationToken);
         }
         catch (Exception exception)
@@ -735,7 +797,8 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
 
     private async Task<string> PrepareNarrativeMemoryAsync(
         IReadOnlyCollection<string> stories,
-        IReadOnlyCollection<string> events)
+        IReadOnlyCollection<string> events,
+        bool forceCompaction = false)
     {
         await _memoryLock.WaitAsync();
 
@@ -768,7 +831,7 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
                 eventBoundary > _summarizedEventCount;
 
             bool shouldCompact =
-                rawCharacters > NarrativeMemoryThresholdChars &&
+                (forceCompaction || rawCharacters > NarrativeMemoryThresholdChars) &&
                 hasUnsummarizedArchive;
 
             if (shouldCompact)
@@ -902,98 +965,49 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
         string narrativeMemory)
     {
         string teamText = context.Team.Count == 0
-            ? "Nenhum herói restante."
+            ? "Nenhum herói."
             : string.Join(
                 Environment.NewLine,
                 context.Team.Select(agent =>
-                    $"- {agent.Name} | classe: {agent.Type} | HP: {agent.CurrentLife}/{agent.MaxLife}"));
+                    $"- {agent.Name} | {agent.Type} | HP {agent.CurrentLife}/{agent.MaxLife}"));
 
         string itemText = context.Items.Count == 0
-            ? "Nenhuma relíquia."
-            : string.Join(
-                Environment.NewLine,
-                context.Items.Select(item => $"- {item.Name}"));
+            ? "Nenhuma."
+            : string.Join(Environment.NewLine, context.Items.Select(item => $"- {item.Name}"));
 
         return $"""
-            CONTINUAÇÃO DA BATALHA
+            BATALHA — ANDAR {context.Level}/5 | RODADA {context.Round}/5
 
-            Andar: {context.Level}/5
-            Rodada: {context.Round}/5
-            ESTADO MECÂNICO ATUAL — ESTE BLOCO TEM PRIORIDADE ABSOLUTA
+            ESTADO ATUAL (OBRIGATÓRIO):
+            Herói: {context.Hero.Name} ({context.Hero.Type})
+            Ação: {context.Theme.ToUpperInvariant()}
+            Resultado: {context.Outcome.ToUpperInvariant()}
+            D20 {context.D20} | Total {context.Total} | DC {context.Dc}
+            Consequência: {context.OutcomeDetail}
 
-            Herói em destaque: {context.Hero.Name} ({context.Hero.Type})
-            AÇÃO ATUAL DO HERÓI: {context.Theme.ToUpperInvariant()}
-            Resultado mecânico: {context.Outcome.ToUpperInvariant()}
-            D20: {context.D20}
-            Total: {context.Total}
-            DC: {context.Dc}
-            Consequência mecânica: {context.OutcomeDetail}
+            REGRAS:
+            1. A ação do herói e o resultado acima são absolutos; nunca os altere.
+            2. ATAQUE = ação ofensiva. DEFESA = ação defensiva. PERÍCIA = técnica, investigação, manobra ou uso inteligente de recurso.
+            3. SUCESSO mostra a ação funcionando. FALHA mostra a tentativa falhando e sua consequência.
+            4. A primeira ação narrada deve ser a ação do herói em destaque, não a de um inimigo ou aliado.
+            5. A memória serve apenas para cenário, personagens e continuidade. Se houver conflito, o estado atual vence.
+            6. A última cena já aconteceu: não a repita. Avance a situação com uma consequência nova.
+            7. Não invente números, dano, cura, ouro, XP ou resultados mecânicos.
+            8. Se a consequência disser que {context.Hero.Name} sofreu dano, mostre-o sendo atingido ou ferido fisicamente. Não transfira o dano para outro personagem nem diga que saiu ileso.
+            9. Não crie missão ou cenário novo sem causa. Evite frases, estruturas e acontecimentos repetidos.
+            10. Escreva 5–7 frases, concretas e cinematográficas. Mostre ação, reação e consequência. Varie o início das cenas.
 
-            CONTRATO DA AÇÃO ATUAL:
-            - ATAQUE = {context.Hero.Name} deve ser mostrado realizando uma ação ofensiva contra a ameaça.
-            - DEFESA = {context.Hero.Name} deve ser mostrado realizando uma ação defensiva contra uma ameaça.
-            - PERÍCIA = {context.Hero.Name} deve ser mostrado realizando uma técnica, perícia, investigação, manobra ou uso inteligente de recurso.
-            - SUCESSO = a ação acima FUNCIONOU. Mostre claramente a consequência positiva da ação do herói.
-            - FALHA = a ação acima NÃO FUNCIONOU. Mostre primeiro a tentativa da ação e depois a consequência da falha.
-
-            EXEMPLOS DE ERROS PROIBIDOS:
-            - AÇÃO ATUAL = ATAQUE: não descreva o herói apenas se defendendo enquanto o inimigo ataca.
-            - AÇÃO ATUAL = DEFESA: não diga que um ataque inimigo acertou o herói em um sucesso defensivo.
-            - AÇÃO ATUAL = PERÍCIA: não substitua a perícia por um ataque ou defesa genérico.
-            - Nunca use a ação da rodada anterior como a ação desta rodada.
-            - A memória explica COMO chegamos aqui; ela não decide O QUE o herói faz agora.
-
-            Equipe atual:
+            EQUIPE:
             {teamText}
 
-            Relíquias:
+            RELÍQUIAS:
             {itemText}
 
-            Memória narrativa:
+            MEMÓRIA:
             {narrativeMemory}
 
-            ORDEM DE PRIORIDADE PARA ESCREVER A CENA:
-            1. Primeiro, obedeça à AÇÃO ATUAL DO HERÓI e ao RESULTADO MECÂNICO.
-            2. Depois, use a memória apenas para definir cenário, ameaça, posição, personagens e continuidade.
-            3. Por último, escolha detalhes estilísticos que tornem a cena interessante.
-            Se a memória e o estado atual entrarem em conflito, IGNORE a memória conflitante e siga o estado atual.
-            A primeira ação concreta da narrativa deve corresponder à AÇÃO ATUAL DO HERÓI.
-            O herói em destaque deve ser o agente principal dessa ação; não substitua a ação dele pela ação de um inimigo ou aliado.
-
-            A última cena da memória JÁ ACONTECEU e não deve ser recontada.
-            Continue a história a partir do ponto exato em que ela terminou.
-            Mostre uma NOVA consequência causada exclusivamente pelo resultado desta rodada.
-            Não repita frases, acontecimentos, diálogos, descobertas ou consequências que já foram narrados.
-            Se os inimigos já foram derrotados, não diga novamente que eles foram derrotados; mostre o que acontece DEPOIS da derrota.
-            Se um objeto, mensagem ou local já foi descoberto, não o descubra novamente; faça a história avançar a partir dessa descoberta.
-            A cada rodada a situação deve mudar de forma perceptível.
-            Não crie uma nova missão ou um novo cenário sem motivo.
-
-            PROFUNDIDADE DA CENA:
-            Escreva aproximadamente 6 a 9 frases, com uma narrativa rica e cinematográfica.
-            Não transforme a rodada em um simples resumo do resultado do dado.
-            Desenvolva a cena mostrando a ação do herói, a reação dos adversários ou do ambiente,
-            a consequência concreta do resultado e como a situação fica diferente para a próxima rodada.
-            Quando fizer sentido, inclua detalhes visuais, sons, tensão, diálogo curto ou reação de outro membro da party.
-            Varie a estrutura das cenas: algumas podem enfatizar ação, outras descoberta, estratégia,
-            reação emocional, perigo ambiental ou mudança na posição dos combatentes.
-            Evite começar repetidamente com o nome do herói e evite estruturas idênticas entre rodadas.
-            O resultado mecânico define o que aconteceu, mas a narrativa deve mostrar COMO isso aconteceu.
-
-            REGRA DE DANO NARRATIVO:
-            Se a Consequência mecânica informar que o herói em destaque sofreu dano nesta rodada,
-            essa consequência é OBRIGATÓRIA na narrativa. Mostre o próprio {context.Hero.Name} sendo atingido,
-            ferido ou sofrendo uma consequência física concreta causada pela falha.
-            Pode ser um golpe, corte, queimadura, impacto, queda, explosão ou outra consequência física coerente com a cena.
-            Não diga que {context.Hero.Name} se defendeu, desviou completamente ou saiu ileso nessa situação.
-            Não transfira o dano para outro membro da party.
-            Não é necessário informar a quantidade de HP perdida.
-
             PRÓXIMO TEMA:
-            Ao final da resposta, escolha o tema que melhor combina com a situação criada para a PRÓXIMA rodada.
-            Não precisa manter o mesmo tema desta rodada. A próxima rodada pode ser Ataque, Defesa ou Perícia,
-            conforme a evolução natural da história.
-            O campo theme do JSON deve conter SOMENTE um destes valores: Ataque, Defesa ou Perícia.
+            Escolha o tema mais natural para a próxima rodada: Ataque, Defesa ou Perícia.
             """;
     }
 

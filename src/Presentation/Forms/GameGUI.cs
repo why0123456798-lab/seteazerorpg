@@ -63,6 +63,8 @@ public class GameGUI : Form
     private Label lblHeroStats = null!;
     private Label lblMissionTitle = null!;
     private PictureBox pbBattleHero = null!;
+    private D20RollControl? d20RollControl;
+    private Task? activeDiceRollTask;
 
     // Referências da loja para atualizar somente a parte afetada por uma compra/venda.
     private Label? shopGoldLabel;
@@ -132,6 +134,7 @@ public class GameGUI : Form
         battleStoryHistory.Clear();
         eventHistory.Clear();
         initialBattleStoryTask = null;
+        activeDiceRollTask = null;
         lastBattleConclusion = null;
 
         #region Populate Data from DB
@@ -1289,7 +1292,45 @@ public class GameGUI : Form
     #region TELA 3: TELA DE BATALHA / MISSÃO
     private async Task StartMissionPhase()
     {
-        // A introdução é gerada e exibida antes de qualquer rolagem.
+        // A introdução pode já estar sendo gerada em background desde a entrada na loja.
+        // Mostramos imediatamente um estado de carregamento para deixar claro que o clique
+        // foi recebido e que a missão está preparando a cena inicial.
+        ClearScreen();
+
+        Panel loadingFrame = new Panel
+        {
+            Size = new Size(620, 300),
+            BackColor = ColorTranslator.FromHtml("#151a24"),
+            Anchor = AnchorStyles.None,
+            Padding = new Padding(30)
+        };
+        loadingFrame.Location = new Point(
+            (mainPanel.ClientSize.Width - loadingFrame.Width) / 2,
+            (mainPanel.ClientSize.Height - loadingFrame.Height) / 2);
+        mainPanel.Controls.Add(loadingFrame);
+
+        Label loadingTitle = new Label
+        {
+            Text = "⚔️  PREPARANDO A MISSÃO",
+            Font = new Font("Segoe UI Semibold", 18, FontStyle.Bold),
+            ForeColor = ColorTranslator.FromHtml("#f3d58a"),
+            Dock = DockStyle.Top,
+            Height = 55,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+        loadingFrame.Controls.Add(loadingTitle);
+
+        Label loadingText = new Label
+        {
+            Text = "A história está sendo preparada...\n\nO destino da sua party está sendo escrito.",
+            Font = new Font("Segoe UI", 12),
+            ForeColor = ColorTranslator.FromHtml("#b7bfce"),
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+        loadingFrame.Controls.Add(loadingText);
+
+        // A abertura é gerada e exibida antes de qualquer rolagem.
         // Isso evita que a abertura seja confundida com a primeira narrativa de combate.
         BattleStory? initialStory = initialBattleStoryTask is not null
             ? await initialBattleStoryTask
@@ -1368,6 +1409,15 @@ public class GameGUI : Form
             Anchor = AnchorStyles.Top
         };
         battleFrame.Controls.Add(pbBattleHero);
+
+        d20RollControl = new D20RollControl
+        {
+            Location = new Point(0, 0),
+            Size = battleFrame.ClientSize,
+            Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
+            Visible = false
+        };
+        battleFrame.Controls.Add(d20RollControl);
 
         // Área principal da crônica: agora ocupa a maior parte da tela e se adapta ao tamanho da janela.
         Label lblChronicle = new Label
@@ -1461,6 +1511,13 @@ public class GameGUI : Form
         btnRoll.Location = new Point(
             Math.Max(0, (battleFrame.ClientSize.Width - btnRoll.Width) / 2),
             bottomButtonY);
+
+        if (d20RollControl is not null && !d20RollControl.IsDisposed)
+        {
+            d20RollControl.Location = new Point(0, 0);
+            d20RollControl.Size = battleFrame.ClientSize;
+            d20RollControl.BringToFront();
+        }
     }
 
     private async Task AppendLog(string text, Color color)
@@ -1535,6 +1592,10 @@ public class GameGUI : Form
         Agent rollingHero = bestHero;
         int d20 = random.Next(1, 21);
         int total = bestVal + d20;
+
+        // O resultado mecânico já está definido, mas o jogador o descobre
+        // visualmente através do D20. A IA poderá trabalhar em paralelo depois.
+        activeDiceRollTask = d20RollControl?.RollAsync(d20) ?? Task.CompletedTask;
 
         await AppendLog($"\n--- TESTE {round}/5 ({rollingHero.Name}) ---", Color.White);
         await AppendLog($"Resultado do dado: {d20} | Total: {total} vs Alvo {dc}", Color.White);
@@ -1665,9 +1726,14 @@ public class GameGUI : Form
 
         BattleStory? story;
 
+        // A IA começa a trabalhar imediatamente, enquanto a UI mantém o feedback
+        // da rolagem visível. Assim o jogador não fica esperando a inferência
+        // começar somente depois da animação/feedback do D20.
+        Task<BattleStory?> storyTask;
+
         if (isInitial && initialBattleStoryTask is not null)
         {
-            story = await initialBattleStoryTask;
+            storyTask = initialBattleStoryTask;
             initialBattleStoryTask = null;
         }
         else if (isFinal)
@@ -1685,7 +1751,7 @@ public class GameGUI : Form
                 .Concat(new[] { currentRoundStory })
                 .ToList();
 
-            story = await _battleNarrator.GenerateConclusionAsync(
+            storyTask = _battleNarrator.GenerateConclusionAsync(
                 currentLevel,
                 finalSuccess,
                 sucessos,
@@ -1694,13 +1760,45 @@ public class GameGUI : Form
                 purchasedItems.ToList(),
                 conclusionHistory,
                 eventHistory.ToList());
-
-            lastBattleConclusion = story;
         }
         else
         {
-            story = await _battleNarrator.GenerateAsync(context);
+            storyTask = _battleNarrator.GenerateAsync(context);
         }
+
+        if (!isInitial)
+        {
+            await AppendLog(
+                "✦ A IA está escrevendo a consequência da rodada... ✦",
+                ColorTranslator.FromHtml("#9fa8da"));
+
+            // A inferência já está em andamento durante este feedback.
+            await Task.Delay(1200);
+        }
+
+        // Nunca revelamos a narrativa antes do fim da animação do D20.
+        // Se a IA terminar antes, seguramos a cena até o dado cair.
+        if (activeDiceRollTask is not null)
+        {
+            try
+            {
+                await activeDiceRollTask;
+            }
+            catch (TaskCanceledException)
+            {
+                // A tela pode ter sido trocada/resetada durante a animação.
+            }
+
+            activeDiceRollTask = null;
+        }
+
+        if (d20RollControl is not null && !d20RollControl.IsDisposed)
+            d20RollControl.Visible = false;
+
+        story = await storyTask;
+
+        if (isFinal)
+            lastBattleConclusion = story;
 
         if (story is null)
         {
