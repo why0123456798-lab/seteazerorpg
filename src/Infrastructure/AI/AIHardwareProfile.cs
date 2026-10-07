@@ -31,7 +31,7 @@ public sealed record AIHardwareProfile(
                     4096,
                     1024,
                     512,
-                    99,
+                    -1,
                     true,
                     $"NVIDIA/CUDA {vramMb} MB VRAM");
             }
@@ -44,7 +44,7 @@ public sealed record AIHardwareProfile(
                     4096,
                     512,
                     256,
-                    99,
+                    -1,
                     true,
                     $"NVIDIA/CUDA {vramMb} MB VRAM");
             }
@@ -55,7 +55,7 @@ public sealed record AIHardwareProfile(
                 2048,
                 256,
                 128,
-                99,
+                -1,
                 true,
                 $"NVIDIA/CUDA {vramMb} MB VRAM");
         }
@@ -66,7 +66,7 @@ public sealed record AIHardwareProfile(
             4096,
             256,
             128,
-            99,
+            -1,
             true,
             "Vulkan GPU (VRAM não identificada automaticamente)");
     }
@@ -79,7 +79,7 @@ public sealed record AIHardwareProfile(
             4096,
             256,
             128,
-            99,
+            -1,
             true,
             "Vulkan GPU (VRAM não identificada automaticamente)");
     }

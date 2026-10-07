@@ -43,11 +43,14 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
         const string introductionSystemPrompt =
             "Você é o mestre de um rpg de mesa de uma aventura de roguelike medieval chamada RPG Battle Maker. " +
             "Responda SOMENTE com um objeto JSON válido, sem markdown e sem texto adicional. " +
-            "O JSON deve conter exatamente duas propriedades: title e narrative. " +
-            "As duas propriedades devem ser strings. " +
+            "O JSON deve conter exatamente três propriedades: title, narrative e theme. " +
+            "As três propriedades devem ser strings. " +
+            "theme deve ser exatamente uma destas opções: Ataque, Defesa ou Perícia. " +
+            "Escolha o tema mais apropriado para o conflito apresentado na própria história. " +
             "title deve ser curto e evocativo. " +
-            "Para uma introdução de nível, escreva aproximadamente 4 frases objetivas e concretas podendo extender caso necessário. " +
-            "Crie uma história cativante de como a party chegou até aquele local, e prepare o ambiente para o futuro conflito" +
+            "Para uma introdução de nível, escreva uma narrativa rica de aproximadamente 8 a 10 frases, com detalhes concretos e progressão causal. " +
+            "Não economize palavras quando um detalhe ajudar a construir o mundo, os personagens ou a tensão. " +
+            "Crie uma história cativante de como a party chegou até aquele local, o que aconteceu no caminho, o que percebe no ambiente e como a ameaça se revela. " +
             "Em níveis posteriores, continue diretamente a história anterior " +
             "e preserve personagens, lugares, ameaças e consequências já estabelecidas. " +
             "Não invente números ou resultados mecânicos.";
@@ -72,10 +75,12 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
 
             Continue exatamente a partir do último acontecimento narrado.
             """,
-            maxTokens: 220,
-            temperature: 0.30f,
+            maxTokens: 560,
+            temperature: 0.28f,
             systemPromptOverride: introductionSystemPrompt,
-            maxNarrativeLength: 900);
+            maxNarrativeLength: 1800,
+            maxAttempts: 2,
+            requireTheme: true);
 
         if (story is not null)
             return story;
@@ -84,10 +89,10 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
         // para que uma resposta AI completa tenha prioridade sobre qualquer fallback fixo.
         const string compactIntroductionSystemPrompt =
             "Você é o mestre de um rpg de mesa de uma aventura medieval. " +
-            "Responda SOMENTE com JSON válido contendo title e narrative. " +
-            "Escreva aproximadamente 4 frases curtas em português do Brasil podendo aumentar caso precise dar mais contexto a história. " +
-            "Frase 1: objetivo da party. Frase 2: como chegou ao local. " +
-            "Frase 3: o que encontrou e a ameaça. Frase 4: por que o combate começa agora. " +
+            "Responda SOMENTE com JSON válido contendo title, narrative e theme. " +
+            "theme deve ser exatamente Ataque, Defesa ou Perícia e deve combinar com o conflito narrado. " +
+            "Escreva aproximadamente 7 a 9 frases em português do Brasil, com narrativa rica e progressão causal. " +
+            "Inclua objetivo da party, caminho até o local, detalhes relevantes do ambiente, acontecimentos encontrados pelo caminho, sinais da ameaça, descoberta do conflito e o motivo pelo qual ele começa agora. " +
             "Não comece com atmosfera genérica e não invente números ou mecânicas.";
 
         BattleStory? compactStory = await GeneratePromptAsync(
@@ -97,12 +102,14 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             MEMÓRIA DA AVENTURA:
             {narrativeMemory}
 
-            Escreva uma introdução causal em aproximadamente 4 frases podendo aumentar caso precise dar mais contexto a história.
+            Escreva uma introdução causal em aproximadamente 7 a 9 frases, podendo aumentar quando isso enriquecer a história sem repetir informações.
             """,
-            maxTokens: 170,
-            temperature: 0.20f,
+            maxTokens: 520,
+            temperature: 0.25f,
             systemPromptOverride: compactIntroductionSystemPrompt,
-            maxNarrativeLength: 700);
+            maxNarrativeLength: 1800,
+            maxAttempts: 2,
+            requireTheme: true);
 
         if (compactStory is not null)
             return compactStory;
@@ -120,20 +127,54 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
 
         BattleStory? story = await GeneratePromptAsync(
             BuildPrompt(context, narrativeMemory),
-            maxTokens: 280,
-            temperature: 0.28f,
-            maxNarrativeLength: 750);
+            maxTokens: 600,
+            temperature: 0.32f,
+            maxNarrativeLength: 1600,
+            rejectInjuryOnSuccess: context.Outcome.Equals("SUCESSO", StringComparison.OrdinalIgnoreCase),
+            requireDamageConsequence: context.Outcome.Equals("FALHA", StringComparison.OrdinalIgnoreCase) &&
+                                      context.OutcomeDetail.Contains("dano", StringComparison.OrdinalIgnoreCase),
+            requireTheme: true);
+
+        if (story is not null && !HasExcessiveNarrativeOverlap(story.Narrative, context.PreviousStories))
+            return story;
 
         if (story is not null)
-            return story;
+        {
+            WriteDiagnostic(
+                "story-repetition-rejected",
+                $"Narrativa rejeitada por repetição excessiva. level={context.Level}; round={context.Round}");
+        }
+
+        BattleStory? freshStory = await GeneratePromptAsync(
+            BuildPrompt(context, narrativeMemory) + """
+
+            ATENÇÃO: a primeira tentativa foi considerada repetitiva.
+            Escreva uma cena completamente nova que avance a situação.
+            Não reutilize a estrutura ou as frases da última narrativa.
+            """,
+            maxTokens: 650,
+            temperature: 0.38f,
+            maxNarrativeLength: 1700,
+            rejectInjuryOnSuccess: context.Outcome.Equals("SUCESSO", StringComparison.OrdinalIgnoreCase),
+            requireDamageConsequence: context.Outcome.Equals("FALHA", StringComparison.OrdinalIgnoreCase) &&
+                                      context.OutcomeDetail.Contains("dano", StringComparison.OrdinalIgnoreCase),
+            requireTheme: true);
+
+        if (freshStory is not null && !HasExcessiveNarrativeOverlap(freshStory.Narrative, context.PreviousStories))
+            return freshStory;
 
         WriteDiagnostic(
             "story-fallback",
             $"Geração inválida após retries. level={context.Level}; round={context.Round}; hero={context.Hero.Name}; outcome={context.Outcome}");
 
         return new BattleStory(
-            $"A Batalha Continua",
-            $"{context.Hero.Name} enfrenta as consequências da rodada marcada como {context.Outcome.ToLowerInvariant()}. A equipe sente a tensão aumentar enquanto o combate avança para o próximo momento decisivo.");
+            context.Outcome.Equals("SUCESSO", StringComparison.OrdinalIgnoreCase)
+                ? "Avanço da Party"
+                : "A Batalha Continua",
+            context.Outcome.Equals("SUCESSO", StringComparison.OrdinalIgnoreCase)
+                ? $"{context.Hero.Name} executa a ação com sucesso e a equipe ganha terreno no confronto. A ameaça é pressionada enquanto a party avança para o próximo momento decisivo."
+                : $"{context.Hero.Name} falha na ação e é atingido no confronto, sofrendo as consequências do golpe. A equipe sente a tensão aumentar enquanto o combate avança para o próximo momento decisivo.",
+            context.Theme);
     }
 
     public async Task<BattleStory?> GenerateConclusionAsync(
@@ -162,8 +203,9 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
               SUCESSO DO NÍVEL
               A equipe concluiu o nível com {successes} sucesso(s) e {failures} falha(s).
               A história deve terminar este capítulo como uma vitória da party.
-              Mostre a equipe superando o conflito, sofrendo as consequências apropriadas,
-              e encerrando este capítulo com uma sensação clara de conquista e progresso como a ameaça foi derrotada ou criando um gancho para as proximas aventuras.
+              Mostre a equipe superando o conflito e encerrando este capítulo com uma sensação clara de conquista e progresso.
+              EM CASO DE SUCESSO, NÃO diga que a party foi ferida, machucada, atacada, sofreu dano, sangrou ou perdeu vida.
+              A vitória deve ser narrada como uma consequência positiva da ação da party, podendo mostrar a ameaça sendo derrotada ou afastada.
               Não trate isso como o fim da aventura inteira: deixe uma continuidade natural
               para o próximo nível.
               """
@@ -190,8 +232,11 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             {teamText}
 
             Escreva uma conclusão satisfatória e coerente podendo ser uma conclusão desse capítulo ou criando um gancho para as próximas aventuras.
+            O resultado mecânico acima é ABSOLUTO e tem prioridade sobre qualquer interpretação da memória narrativa.
             Em caso de sucesso, a party deve claramente vencer o conflito deste nível mesmo que o objetivo final não tenha aindo sido alcançado.
+            Em caso de sucesso, NÃO descreva ferimentos, dano, sangue, perda de vida ou a party sendo atacada. Ferimentos pertencem exclusivamente às rodadas que tiveram falha ou crítico negativo.
             Em caso de fracasso, a party deve claramente ser derrotada e a aventura terminar.
+            O texto NÃO pode transformar a derrota em vitória mesmo que a memória anterior contenha cenas de sucesso.
             Não invente números, recompensas ou mecânicas que não foram informadas.
             """;
 
@@ -210,10 +255,18 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             maxTokens: 420,
             temperature: 0.32f,
             systemPromptOverride: conclusionSystemPrompt,
-            maxNarrativeLength: 1800);
+            maxNarrativeLength: 1800,
+            rejectInjuryOnSuccess: success);
 
-        if (story is not null)
+        if (story is not null && (success || !ContainsVictoryConsequence(story.Narrative)))
             return story;
+
+        if (!success && story is not null && ContainsVictoryConsequence(story.Narrative))
+        {
+            WriteDiagnostic(
+                "conclusion-victory-rejected",
+                $"Conclusão de vitória rejeitada porque o resultado mecânico é DERROTA. level={level}; successes={successes}; failures={failures}");
+        }
 
         // Retry with the already compacted narrative memory so the final scene still gets a fresh AI ending.
         string compactPrompt = $"""
@@ -242,9 +295,10 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             maxTokens: 320,
             temperature: 0.28f,
             systemPromptOverride: conclusionSystemPrompt,
-            maxNarrativeLength: 1400);
+            maxNarrativeLength: 1400,
+            rejectInjuryOnSuccess: success);
 
-        if (story is not null)
+        if (story is not null && (success || !ContainsVictoryConsequence(story.Narrative)))
             return story;
 
         return new BattleStory(
@@ -316,7 +370,11 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
         int maxTokens = 220,
         float temperature = 0.35f,
         string? systemPromptOverride = null,
-        int maxNarrativeLength = 500)
+        int maxNarrativeLength = 500,
+        int maxAttempts = 3,
+        bool rejectInjuryOnSuccess = false,
+        bool requireDamageConsequence = false,
+        bool requireTheme = false)
     {
         await _generationLock.WaitAsync();
 
@@ -332,10 +390,31 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
                 "As duas propriedades devem ter APENAS strings como valores. " +
                 "title deve ser curto. narrative deve ter de 2 a 3 frases. " +
                 "Não invente números, dano, cura, ouro, DC, XP ou resultados diferentes dos informados no estado. " +
-                "Se houve falha, descreva claramente que o herói ou grupo foi prejudicado, sem inventar um valor de dano. " +
+                "Em caso de FALHA, descreva claramente que o herói ou grupo foi prejudicado, sem inventar um valor de dano. " +
+                "Quando a falha tiver causado dano ao herói em destaque, é OBRIGATÓRIO narrar que esse próprio herói foi atingido, ferido ou sofreu uma consequência física concreta causada pelo conflito. " +
+                "Não diga que ele se defendeu com sucesso, desviou completamente ou saiu ileso quando o estado mecânico informa que ele sofreu dano. " +
+                "Em caso de SUCESSO, é PROIBIDO dizer que a party foi ferida, machucada, sofreu dano, sangrou ou perdeu vida. " +
+                "Em caso de SUCESSO, descreva apenas avanço, defesa bem-sucedida, domínio da situação, derrota do inimigo ou outra consequência positiva coerente. " +
                 "Se houve crítico, destaque o impacto extraordinário. " +
                 "A narrativa deve continuar naturalmente a partir da história anterior quando houver uma. " +
                 "Escreva tudo em português do Brasil.";
+
+            if (requireDamageConsequence)
+            {
+                systemPrompt +=
+                    " ATENÇÃO: esta falha causou dano ao herói em destaque. " +
+                    "A narrativa SOMENTE pode ser aceita se mostrar esse herói sendo atingido, ferido ou sofrendo uma consequência física concreta. " +
+                    "Não basta dizer que a situação ficou perigosa; o dano precisa aparecer na ação narrada. " +
+                    "Não atribua esse dano a outro personagem.";
+            }
+
+            if (requireTheme)
+            {
+                systemPrompt +=
+                    " O JSON também deve conter exatamente a propriedade theme. " +
+                    "theme deve ser exatamente Ataque, Defesa ou Perícia e deve representar o melhor tema para a PRÓXIMA rodada, " +
+                    "com base na situação que você acabou de narrar. Não escolha aleatoriamente.";
+            }
 
             return await GenerateWithRetryAsync(
                 prompt,
@@ -343,7 +422,22 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
                 maxTokens,
                 temperature,
                 diagnosticPrefix: "story",
-                parser: response => ParseResponse(response, maxNarrativeLength));
+                parser: response =>
+                {
+                    BattleStory? parsed = ParseResponse(response, maxNarrativeLength, requireTheme);
+
+                    if (parsed is null)
+                        return null;
+
+                    if (rejectInjuryOnSuccess && ContainsInjuryConsequence(parsed.Narrative))
+                        return null;
+
+                    if (requireDamageConsequence && !ContainsDamageConsequence(parsed.Narrative))
+                        return null;
+
+                    return parsed;
+                },
+                maxAttempts: maxAttempts);
         }
         catch (Exception exception)
         {
@@ -362,10 +456,10 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
         int maxTokens,
         float temperature,
         string diagnosticPrefix,
-        Func<string?, T?> parser)
+        Func<string?, T?> parser,
+        int maxAttempts = 3)
         where T : class
     {
-        const int maxAttempts = 3;
 
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
@@ -444,9 +538,11 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
                 {
                     ContextSize = profile.ContextSize,
                     GpuLayerCount = profile.GpuLayerCount,
+                    MainGpu = 0,
                     BatchSize = profile.BatchSize,
                     UBatchSize = profile.UBatchSize,
-                    FlashAttention = profile.FlashAttention
+                    FlashAttention = profile.FlashAttention,
+                    OpOffload = profile.Backend != AIBackend.Cpu
                 };
 
                 WriteDiagnostic(
@@ -568,7 +664,8 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
                     "Responda SOMENTE com um objeto JSON válido, sem markdown e sem texto adicional. " +
                     "O JSON deve conter exatamente duas propriedades: title e narrative. " +
                     "As duas propriedades devem ter APENAS strings como valores. " +
-                    "title deve ser curto. narrative deve ter de 2 ou 3 frases. " +
+                    "title deve ser curto. narrative deve ter aproximadamente 4 a 6 frases, desenvolvendo a cena em vez de apenas resumir o resultado. " +
+                    "Descreva ações, ambiente, reação dos inimigos e consequências narrativas coerentes com o resultado informado. " +
                     "Não invente números, dano, cura, ouro, DC, XP ou resultados diferentes dos informados no estado. " +
                     "Se houve falha, descreva claramente que o herói ou grupo foi prejudicado, sem inventar um valor de dano. " +
                     "Se houve crítico, destaque o impacto extraordinário. " +
@@ -802,7 +899,7 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
 
             Andar: {context.Level}/5
             Rodada: {context.Round}/5
-            Tema do teste: {context.Theme}
+            Tema usado nesta rodada: {context.Theme}
             Herói em destaque: {context.Hero.Name} ({context.Hero.Type})
             D20: {context.D20}
             Total: {context.Total}
@@ -819,9 +916,40 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             Memória narrativa:
             {narrativeMemory}
 
-            Continue exatamente essa mesma história.
-            Mostre como a ação da rodada mudou a situação da batalha.
+            A última cena da memória JÁ ACONTECEU e não deve ser recontada.
+            Continue a história a partir do ponto exato em que ela terminou.
+            Mostre uma NOVA consequência causada exclusivamente pelo resultado desta rodada.
+            Não repita frases, acontecimentos, diálogos, descobertas ou consequências que já foram narrados.
+            Se os inimigos já foram derrotados, não diga novamente que eles foram derrotados; mostre o que acontece DEPOIS da derrota.
+            Se um objeto, mensagem ou local já foi descoberto, não o descubra novamente; faça a história avançar a partir dessa descoberta.
+            A cada rodada a situação deve mudar de forma perceptível.
             Não crie uma nova missão ou um novo cenário sem motivo.
+
+            PROFUNDIDADE DA CENA:
+            Escreva aproximadamente 6 a 9 frases, com uma narrativa rica e cinematográfica.
+            Não transforme a rodada em um simples resumo do resultado do dado.
+            Desenvolva a cena mostrando a ação do herói, a reação dos adversários ou do ambiente,
+            a consequência concreta do resultado e como a situação fica diferente para a próxima rodada.
+            Quando fizer sentido, inclua detalhes visuais, sons, tensão, diálogo curto ou reação de outro membro da party.
+            Varie a estrutura das cenas: algumas podem enfatizar ação, outras descoberta, estratégia,
+            reação emocional, perigo ambiental ou mudança na posição dos combatentes.
+            Evite começar repetidamente com o nome do herói e evite estruturas idênticas entre rodadas.
+            O resultado mecânico define o que aconteceu, mas a narrativa deve mostrar COMO isso aconteceu.
+
+            REGRA DE DANO NARRATIVO:
+            Se a Consequência mecânica informar que o herói em destaque sofreu dano nesta rodada,
+            essa consequência é OBRIGATÓRIA na narrativa. Mostre o próprio {context.Hero.Name} sendo atingido,
+            ferido ou sofrendo uma consequência física concreta causada pela falha.
+            Pode ser um golpe, corte, queimadura, impacto, queda, explosão ou outra consequência física coerente com a cena.
+            Não diga que {context.Hero.Name} se defendeu, desviou completamente ou saiu ileso nessa situação.
+            Não transfira o dano para outro membro da party.
+            Não é necessário informar a quantidade de HP perdida.
+
+            PRÓXIMO TEMA:
+            Ao final da resposta, escolha o tema que melhor combina com a situação criada para a PRÓXIMA rodada.
+            Não precisa manter o mesmo tema desta rodada. A próxima rodada pode ser Ataque, Defesa ou Perícia,
+            conforme a evolução natural da história.
+            O campo theme do JSON deve conter SOMENTE um destes valores: Ataque, Defesa ou Perícia.
             """;
     }
 
@@ -889,9 +1017,130 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
             """;
     }
 
+    private static bool HasExcessiveNarrativeOverlap(
+        string narrative,
+        IReadOnlyCollection<string> previousStories)
+    {
+        string latest = previousStories.LastOrDefault() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(latest) || string.IsNullOrWhiteSpace(narrative))
+            return false;
+
+        static HashSet<string> BuildShingles(string text)
+        {
+            string[] words = System.Text.RegularExpressions.Regex
+                .Replace(text.ToLowerInvariant(), @"[^\p{L}\p{N}]+", " ")
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            var shingles = new HashSet<string>();
+            for (int i = 0; i + 3 < words.Length; i++)
+                shingles.Add($"{words[i]} {words[i + 1]} {words[i + 2]} {words[i + 3]}");
+
+            return shingles;
+        }
+
+        HashSet<string> current = BuildShingles(narrative);
+        HashSet<string> previous = BuildShingles(latest);
+
+        if (current.Count == 0 || previous.Count == 0)
+            return false;
+
+        int common = current.Intersect(previous).Count();
+        double overlap = common / (double)Math.Min(current.Count, previous.Count);
+
+        return overlap >= 0.45;
+    }
+
+    private static string? NormalizeTheme(string? theme)
+    {
+        return theme?.Trim().ToLowerInvariant() switch
+        {
+            "ataque" => Agent.Ataque,
+            "defesa" => Agent.Defesa,
+            "perícia" => Agent.Pericia,
+            "pericia" => Agent.Pericia,
+            _ => null
+        };
+    }
+
+    private static bool ContainsVictoryConsequence(string narrative)
+    {
+        string normalized = narrative.ToLowerInvariant();
+
+        string[] forbidden =
+        {
+            "vitória",
+            "vitoriosa",
+            "vitorioso",
+            "triunfo",
+            "venceu",
+            "vencem",
+            "derrotou os",
+            "derrota dos inimigos",
+            "ameaça foi derrotada",
+            "emergiu vitoriosa",
+            "continuou sua jornada",
+            "pronta para enfrentar"
+        };
+
+        return forbidden.Any(normalized.Contains);
+    }
+
+    private static bool ContainsInjuryConsequence(string narrative)
+    {
+        string normalized = narrative.ToLowerInvariant();
+
+        string[] forbidden =
+        {
+            "ferid",
+            "machuc",
+            "ferimento",
+            "dano",
+            "sangr",
+            "lesão",
+            "lesionado",
+            "perdeu vida",
+            "perde vida",
+            "recebeu dano",
+            "sofreu dano"
+        };
+
+        return forbidden.Any(normalized.Contains);
+    }
+
+    private static bool ContainsDamageConsequence(string narrative)
+    {
+        string normalized = narrative.ToLowerInvariant();
+
+        string[] concreteConsequences =
+        {
+            "ating",
+            "golpe",
+            "acert",
+            "ferid",
+            "machuc",
+            "ferimento",
+            "cort",
+            "queim",
+            "sangr",
+            "lesão",
+            "lesionado",
+            "impacto",
+            "derrub",
+            "arremess",
+            "explosão",
+            "explod",
+            "cravou",
+            "perfur",
+            "rasg"
+        };
+
+        return concreteConsequences.Any(normalized.Contains);
+    }
+
     private static BattleStory? ParseResponse(
         string? response,
-        int maxNarrativeLength = 500)
+        int maxNarrativeLength = 500,
+        bool requireTheme = false)
     {
         if (string.IsNullOrWhiteSpace(response))
             return null;
@@ -910,16 +1159,21 @@ public sealed class LocalBattleNarrator : IBattleNarrator, IDisposable
 
             string title = ReadJsonText(root, "title");
             string narrative = ReadJsonText(root, "narrative");
+            string? theme = requireTheme
+                ? NormalizeTheme(ReadJsonText(root, "theme"))
+                : null;
 
             if (string.IsNullOrWhiteSpace(title) ||
-                string.IsNullOrWhiteSpace(narrative))
+                string.IsNullOrWhiteSpace(narrative) ||
+                (requireTheme && theme is null))
             {
                 return null;
             }
 
             return new BattleStory(
                 Clean(title, 70),
-                Clean(narrative, maxNarrativeLength));
+                Clean(narrative, maxNarrativeLength),
+                theme);
         }
         catch (JsonException)
         {

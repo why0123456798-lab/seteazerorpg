@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Windows.Forms;
+using LLama.Native;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using RPGBattleMaker.Application.Interfaces;
@@ -19,6 +20,23 @@ namespace RPGBattleMaker
         [STAThread]
         static void Main()
         {
+            // LLamaSharp must be configured before any native LLama API is touched.
+            // CUDA runtime DLLs are not installed, so use the NVIDIA GPU through Vulkan.
+            NativeLibraryConfig.All
+                .WithCuda(false)
+                .WithVulkan(true)
+                .WithAutoFallback(false)
+                .WithLogCallback((level, message) =>
+                {
+                    string logDirectory = Path.Combine(AppContext.BaseDirectory, "Data");
+                    Directory.CreateDirectory(logDirectory);
+                    File.AppendAllText(
+                        Path.Combine(logDirectory, "battle_ai_native.log"),
+                        $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{level}] {message}{Environment.NewLine}");
+                });
+
+            Environment.SetEnvironmentVariable("RPGBATTLE_LLM_BACKEND", "vulkan");
+
             SQLitePCL.Batteries.Init();
             ApplicationConfiguration.Initialize();
 

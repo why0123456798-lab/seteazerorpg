@@ -60,6 +60,7 @@ public class GameGUI : Form
     private RichTextBox logTxt = null!;
     private Button btnRoll = null!;
     private Label lblHeroStats = null!;
+    private Label lblMissionTitle = null!;
     private PictureBox pbBattleHero = null!;
     #endregion
 
@@ -492,6 +493,12 @@ public class GameGUI : Form
             currentLevel,
             battleStoryHistory.ToList(),
             eventHistory.ToList());
+    }
+
+    private string GetRandomTheme()
+    {
+        string[] themes = { Agent.Ataque, Agent.Defesa, Agent.Pericia };
+        return themes[random.Next(themes.Length)];
     }
 
     private async Task StartGame(string chosenMode)
@@ -1250,11 +1257,17 @@ public class GameGUI : Form
     #region TELA 3: TELA DE BATALHA / MISSÃO
     private async Task StartMissionPhase()
     {
+        // A história inicial agora também define o tema mecânico da missão.
+        // Aguardamos a geração antes de calcular DC e escolher o melhor herói,
+        // garantindo que narrativa e mecânica estejam alinhadas.
+        BattleStory? initialStory = initialBattleStoryTask is not null
+            ? await initialBattleStoryTask
+            : null;
+
+        currentTheme = initialStory?.Theme ?? GetRandomTheme();
+
         ClearScreen();
         lastBattleConclusion = null;
-
-        string[] themes = { Agent.Ataque, Agent.Defesa, Agent.Pericia };
-        currentTheme = themes[random.Next(themes.Length)];
 
         Dictionary<int, int> dcTable = mode == "Difícil" ?
             new Dictionary<int, int> { { 1, 13 }, { 2, 16 }, { 3, 19 }, { 4, 23 }, { 5, 27 } } :
@@ -1274,7 +1287,7 @@ public class GameGUI : Form
         // --- CONTROLES COM DOCK TOP (A ordem de adição importa!) ---
 
         // 1º O Título Principal da Missão
-        Label lblMTitle = new Label
+        lblMissionTitle = new Label
         {
             Text = $"🚨 MISSÃO NÍVEL {currentLevel} | TEMA: {currentTheme.ToUpper()} 🚨",
             Font = new Font("Arial", 14, FontStyle.Bold),
@@ -1283,7 +1296,7 @@ public class GameGUI : Form
             Dock = DockStyle.Top,
             Height = 35
         };
-        battleFrame.Controls.Add(lblMTitle);
+        battleFrame.Controls.Add(lblMissionTitle);
 
         // 2º Informações de Dificuldade (DC)
         Label lblDcInfo = new Label
@@ -1321,18 +1334,41 @@ public class GameGUI : Form
         };
         battleFrame.Controls.Add(pbBattleHero);
 
-        // Log de Batalha - Ajustado o Top para 210 para não colidir com o PictureBox
-        logTxt = new RichTextBox
+        // Área principal da crônica: agora ocupa a maior parte da tela e se adapta ao tamanho da janela.
+        Label lblChronicle = new Label
         {
-            BackColor = ColorTranslator.FromHtml("#1e1e1e"),
-            Font = new Font("Consolas", 10),
-            ReadOnly = true,
-            Location = new Point(20, 210),
-            Width = Math.Max(400, battleFrame.ClientSize.Width - 40),
-            Height = 210,
+            Text = "📖  CRÔNICA DA AVENTURA",
+            Font = new Font("Segoe UI", 11, FontStyle.Bold),
+            ForeColor = ColorTranslator.FromHtml("#d7b56d"),
+            TextAlign = ContentAlignment.MiddleLeft,
+            Location = new Point(20, 205),
+            Size = new Size(Math.Max(400, battleFrame.ClientSize.Width - 40), 30),
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
         };
+        battleFrame.Controls.Add(lblChronicle);
+
+        logTxt = new RichTextBox
+        {
+            BackColor = ColorTranslator.FromHtml("#171a22"),
+            ForeColor = ColorTranslator.FromHtml("#e7e9ee"),
+            Font = new Font("Segoe UI", 11.5f),
+            ReadOnly = true,
+            BorderStyle = BorderStyle.FixedSingle,
+            DetectUrls = false,
+            Location = new Point(20, 238),
+            Width = Math.Max(400, battleFrame.ClientSize.Width - 40),
+            Height = Math.Max(220, battleFrame.ClientSize.Height - 330),
+            Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
+            ScrollBars = RichTextBoxScrollBars.Vertical,
+            TabStop = false
+        };
         battleFrame.Controls.Add(logTxt);
+
+        // Mantém a área narrativa e o botão proporcionais mesmo quando a janela é redimensionada.
+        battleFrame.Resize += (_, _) => UpdateBattleLayout(battleFrame);
+
+        // A história inicial é exibida por GenerateBattleStoryAsync(isInitial: true).
+        // Não a adicionamos aqui para evitar que a mesma introdução apareça duas vezes.
 
         // Botão de Rolar Dados
         btnRoll = new Button
@@ -1344,12 +1380,13 @@ public class GameGUI : Form
             BackColor = ColorTranslator.FromHtml("#e91e63"),
             ForeColor = Color.White,
             Size = new Size(360, 50),
-            Location = new Point(Math.Max(0, (battleFrame.ClientSize.Width - 360) / 2), 440),
-            Anchor = AnchorStyles.Top,
+            Location = new Point(Math.Max(0, (battleFrame.ClientSize.Width - 360) / 2), Math.Max(0, battleFrame.ClientSize.Height - 70)),
+            Anchor = AnchorStyles.Bottom,
             FlatStyle = FlatStyle.Flat
         };
         btnRoll.Click += async (s, e) => await NextTestRoll();
         battleFrame.Controls.Add(btnRoll);
+        UpdateBattleLayout(battleFrame);
 
         await SetupNextCombatantInfo();
 
@@ -1361,14 +1398,50 @@ public class GameGUI : Form
         }
     }
 
+    private void UpdateBattleLayout(Panel battleFrame)
+    {
+        if (logTxt is null || btnRoll is null || logTxt.IsDisposed || btnRoll.IsDisposed)
+            return;
+
+        int bottomButtonHeight = btnRoll.Height;
+        int bottomButtonY = Math.Max(0, battleFrame.ClientSize.Height - bottomButtonHeight - 14);
+        int logTop = 238;
+        int logBottom = bottomButtonY - 18;
+
+        logTxt.Location = new Point(20, logTop);
+        logTxt.Size = new Size(
+            Math.Max(400, battleFrame.ClientSize.Width - 40),
+            Math.Max(180, logBottom - logTop));
+
+        btnRoll.Location = new Point(
+            Math.Max(0, (battleFrame.ClientSize.Width - btnRoll.Width) / 2),
+            bottomButtonY);
+    }
+
     private async Task AppendLog(string text, Color color)
     {
+        if (logTxt is null || logTxt.IsDisposed)
+            return;
+
         logTxt.SelectionStart = logTxt.TextLength;
         logTxt.SelectionLength = 0;
         logTxt.SelectionColor = color;
-        logTxt.AppendText(text + "\n");
+
+        bool isNarrative = color == Color.White;
+        bool isHeader = color == Color.Gold || color == Color.Orange;
+
+        logTxt.SelectionFont = isNarrative
+            ? new Font("Segoe UI", 11.5f, FontStyle.Regular)
+            : isHeader
+                ? new Font("Segoe UI", 12.5f, FontStyle.Bold)
+                : new Font("Segoe UI", 10.5f, FontStyle.Regular);
+
+        logTxt.AppendText(text + Environment.NewLine + Environment.NewLine);
         logTxt.SelectionColor = logTxt.ForeColor;
+        logTxt.SelectionFont = new Font("Segoe UI", 11.5f, FontStyle.Regular);
         logTxt.ScrollToCaret();
+
+        await Task.CompletedTask;
     }
 
     private async Task SetupNextCombatantInfo()
@@ -1595,6 +1668,21 @@ public class GameGUI : Form
         await AppendLog($"📖 {story.Title}", Color.Gold);
         await AppendLog(story.Narrative, Color.White);
 
+        if (!isFinal && story.Theme is not null)
+        {
+            currentTheme = story.Theme;
+
+            // O tema da missão é dinâmico: a IA define o tema da próxima rodada
+            // e o título da tela deve refletir imediatamente essa mudança.
+            if (lblMissionTitle is not null && !lblMissionTitle.IsDisposed)
+            {
+                lblMissionTitle.Text = $"🚨 MISSÃO NÍVEL {currentLevel} | TEMA: {currentTheme.ToUpper()} 🚨";
+                lblMissionTitle.Refresh();
+            }
+
+            await AppendLog($"⚔️ Próximo teste definido pela IA: {currentTheme}", Color.Cyan);
+        }
+
         battleStoryHistory.Add($"{story.Title}: {story.Narrative}");
     }
 
@@ -1659,8 +1747,8 @@ public class GameGUI : Form
         Label loadingTitle = new Label
         {
             Text = missionSuccess
-                ? "✦ CONCLUSÃO DA BATALHA ✦"
-                : "✦ DESFECHO DA JORNADA ✦",
+                ? "✦ VITÓRIA DA PARTY ✦"
+                : "☠ GAME OVER — A PARTY FOI DERROTADA ☠",
             Font = new Font("Segoe UI Semibold", 17, FontStyle.Bold),
             ForeColor = missionSuccess
                 ? ColorTranslator.FromHtml("#4caf50")
@@ -1863,23 +1951,78 @@ public class GameGUI : Form
     {
         ClearScreen();
 
-        // Painel de fundo centralizado
+        const int frameWidth = 600;
+        const int innerWidth = 594;
+        const int contentWidth = 540;
+        const int optionWidth = 520;
+
+        using Font titleFont = new Font("Arial", 17, FontStyle.Bold);
+        using Font descFont = new Font("Arial", 10);
+        using Font optionFont = new Font("Arial", 10, FontStyle.Bold);
+
+        // Mede o texto antes de montar os controles para que títulos,
+        // descrições e opções possam crescer verticalmente sem serem cortados.
+        int titleTextHeight = TextRenderer.MeasureText(
+            gameEvent.Name ?? string.Empty,
+            titleFont,
+            new Size(560, int.MaxValue),
+            TextFormatFlags.WordBreak | TextFormatFlags.HorizontalCenter).Height;
+
+        int descTextHeight = TextRenderer.MeasureText(
+            gameEvent.Description ?? string.Empty,
+            descFont,
+            new Size(contentWidth, int.MaxValue),
+            TextFormatFlags.WordBreak | TextFormatFlags.HorizontalCenter).Height;
+
+        int titleHeight = Math.Max(52, titleTextHeight + 12);
+        int descHeight = Math.Max(88, descTextHeight + 14);
+        int separatorY = 38 + titleHeight + 6;
+
+        var optionColors = new[]
+        {
+            ColorTranslator.FromHtml("#c62828"), // Opção A — vermelho / ousada
+            ColorTranslator.FromHtml("#1565c0"), // Opção B — azul   / equilibrada
+            ColorTranslator.FromHtml("#2e7d32"), // Opção C — verde  / segura
+        };
+
+        var optionTexts = new[] { gameEvent.OptionA, gameEvent.OptionB, gameEvent.OptionC };
+        int[] optionHeights = new int[3];
+
+        for (int i = 0; i < optionTexts.Length; i++)
+        {
+            string optionText = optionTexts[i] ?? $"Opção {i + 1}";
+            string buttonText = $"{i + 1}. {optionText}";
+
+            int textHeight = TextRenderer.MeasureText(
+                buttonText,
+                optionFont,
+                new Size(optionWidth - 20, int.MaxValue),
+                TextFormatFlags.WordBreak).Height;
+
+            optionHeights[i] = Math.Max(62, textHeight + 18);
+        }
+
+        int optionsTop = separatorY + 12 + descHeight + 18;
+        int optionsBottom = optionsTop + optionHeights.Sum() + (2 * 10);
+        int frameHeight = Math.Max(480, optionsBottom + 22);
+
+        // Painel de fundo centralizado. A altura agora acompanha o conteúdo.
         Panel frame = new Panel
         {
-            Size = new Size(600, 480),
+            Size = new Size(frameWidth, frameHeight),
             BackColor = ColorTranslator.FromHtml("#1a1a2e"),
+            Anchor = AnchorStyles.None
         };
         frame.Location = new Point(
             (mainPanel.Width - frame.Width) / 2,
-            (mainPanel.Height - frame.Height) / 2
+            Math.Max(10, (mainPanel.Height - frame.Height) / 2)
         );
-        frame.Anchor = AnchorStyles.None;
         mainPanel.Controls.Add(frame);
 
         // Borda decorativa (painel interno levemente diferente)
         Panel innerBorder = new Panel
         {
-            Size = new Size(594, 474),
+            Size = new Size(innerWidth, frameHeight - 6),
             Location = new Point(3, 3),
             BackColor = ColorTranslator.FromHtml("#16213e"),
         };
@@ -1900,9 +2043,9 @@ public class GameGUI : Form
         Label lblTitle = new Label
         {
             Text = gameEvent.Name,
-            Font = new Font("Arial", 17, FontStyle.Bold),
+            Font = titleFont,
             ForeColor = Color.White,
-            Size = new Size(560, 52),
+            Size = new Size(560, titleHeight),
             TextAlign = ContentAlignment.MiddleCenter,
             Location = new Point(7, 38),
             AutoSize = false
@@ -1913,51 +2056,45 @@ public class GameGUI : Form
         Panel separator = new Panel
         {
             Size = new Size(540, 2),
-            Location = new Point(27, 82),
+            Location = new Point(27, separatorY),
             BackColor = ColorTranslator.FromHtml("#ff9800")
         };
         innerBorder.Controls.Add(separator);
 
         // Descrição / narrativa do evento
+        int descY = separatorY + 12;
         Label lblDesc = new Label
         {
             Text = gameEvent.Description,
-            Font = new Font("Arial", 10),
+            Font = descFont,
             ForeColor = ColorTranslator.FromHtml("#cccccc"),
-            Size = new Size(540, 88),
+            Size = new Size(contentWidth, descHeight),
             TextAlign = ContentAlignment.MiddleCenter,
-            Location = new Point(27, 94),
+            Location = new Point(27, descY),
             AutoSize = false
         };
         innerBorder.Controls.Add(lblDesc);
 
         // ── 3 Botões de Opção ──────────────────────────────────────
-        var optionColors = new[]
-        {
-        ColorTranslator.FromHtml("#c62828"), // Opção A — vermelho / ousada
-        ColorTranslator.FromHtml("#1565c0"), // Opção B — azul   / equilibrada
-        ColorTranslator.FromHtml("#2e7d32"), // Opção C — verde  / segura
-    };
-
-        var optionTexts = new[] { gameEvent.OptionA, gameEvent.OptionB, gameEvent.OptionC };
+        int currentOptionY = optionsTop;
 
         for (int i = 0; i < 3; i++)
         {
             int chosenIndex = i;
-
             string optionText = optionTexts[i] ?? $"Opção {i + 1}";
+            int optionHeight = optionHeights[i];
 
             Button btnOption = new Button
             {
                 Text = $"{i + 1}. {optionText}",
-                Font = new Font("Arial", 10, FontStyle.Bold),
+                Font = optionFont,
                 BackColor = optionColors[i],
                 ForeColor = Color.White,
-                Size = new Size(520, 62),
-                Location = new Point(37, 190 + i * 72),
+                Size = new Size(optionWidth, optionHeight),
+                Location = new Point(37, currentOptionY),
                 FlatStyle = FlatStyle.Flat,
                 TextAlign = ContentAlignment.MiddleLeft,
-                Padding = new Padding(8, 0, 0, 0)
+                Padding = new Padding(10, 6, 10, 6)
             };
             btnOption.FlatAppearance.BorderSize = 0;
 
@@ -1967,7 +2104,6 @@ public class GameGUI : Form
                 foreach (Control ctrl in innerBorder.Controls)
                     if (ctrl is Button b) b.Enabled = false;
 
-                // Chama o serviço com a opção escolhida pelo jogador
                 EventResult result = _eventService.GetEventResult(
                     gameEvent,
                     chosenIndex,
@@ -1976,19 +2112,17 @@ public class GameGUI : Form
                 string chosenOption = optionTexts[chosenIndex]
                     ?? $"Opção {chosenIndex + 1}";
 
-                // Guarda a cena + decisão + consequência para que o próximo
-                // evento continue exatamente de onde este terminou.
                 eventHistory.Add(
                     $"Evento: {gameEvent.Name}. " +
                     $"{gameEvent.Description} " +
                     $"Escolha do grupo: {chosenOption} " +
                     $"Resultado: {result.Title}. {result.Description}");
 
-                // Exibe o resultado na mesma tela
                 await ShowEventResult(innerBorder, result);
             };
 
             innerBorder.Controls.Add(btnOption);
+            currentOptionY += optionHeight + 10;
         }
     }
 
